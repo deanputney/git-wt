@@ -1,0 +1,86 @@
+#!/bin/bash
+
+case "$1" in
+  a|add)
+    shift
+    # Save the current filter.git-crypt.required setting
+    required_setting=$(git config filter.git-crypt.required 2>/dev/null || echo "")
+
+    # Temporarily disable git-crypt by removing the required flag
+    git config --unset filter.git-crypt.required || true
+
+    # Create the worktree without checking out files
+    worktree_path="$1"
+    git worktree add --no-checkout "$@"
+
+    # Restore the required setting if it existed
+    if [ -n "$required_setting" ]; then
+      git config filter.git-crypt.required "$required_setting"
+    fi
+
+    # In the worktree, disable filters temporarily and checkout
+    git -C "$worktree_path" config filter.git-crypt.smudge "cat"
+    git -C "$worktree_path" config filter.git-crypt.clean "cat"
+    git -C "$worktree_path" reset --hard HEAD
+
+    # Re-enable filters, unlock, and re-checkout to decrypt
+    git -C "$worktree_path" config --unset filter.git-crypt.smudge
+    git -C "$worktree_path" config --unset filter.git-crypt.clean
+    git -C "$worktree_path" crypt unlock
+    git -C "$worktree_path" reset --hard HEAD
+    ;;
+
+  rm|remove)
+    shift
+    git worktree remove "$@"
+    ;;
+
+  ls|list)
+    shift
+    git worktree list
+    ;;
+
+  cl|clone)
+    shift
+    repo_url="$1"
+    folder_name="${2:-$(basename "$repo_url" .git)}"
+
+    if [ -z "$repo_url" ]; then
+      echo "Usage: git-wt clone <repository-url> [folder-name]"
+      exit 1
+    fi
+
+    # Create the folder and clone bare
+    mkdir -p "$folder_name"
+    git clone --bare "$repo_url" "$folder_name/.git"
+
+    # Set up fetch refspec for remote tracking
+    git -C "$folder_name/.git" config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
+
+    # Determine the primary branch from HEAD
+    primary_branch=$(git -C "$folder_name/.git" symbolic-ref --short HEAD 2>/dev/null)
+
+    # Fallback to main or master
+    if [ -z "$primary_branch" ]; then
+      if git -C "$folder_name/.git" rev-parse --verify refs/heads/main >/dev/null 2>&1; then
+        primary_branch="main"
+      elif git -C "$folder_name/.git" rev-parse --verify refs/heads/master >/dev/null 2>&1; then
+        primary_branch="master"
+      else
+        echo "Error: Could not determine primary branch"
+        exit 1
+      fi
+    fi
+
+    # Add worktree for primary branch
+    git -C "$folder_name/.git" worktree add "../$primary_branch" "$primary_branch"
+
+    echo "Cloned $repo_url into $folder_name/"
+    echo "Primary branch '$primary_branch' checked out at $folder_name/$primary_branch/"
+    ;;
+
+  *)
+    # Pass through to normal git worktree
+    git worktree "$@"
+    ;;
+esac

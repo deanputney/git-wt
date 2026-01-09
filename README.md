@@ -52,3 +52,6 @@ A `git wt clone` clone:
     └── README.md
 ```
 
+With the standard clone the repository code files leave no clear space for your worktrees to go. It also implies getting to work straight away in there, in a way that's not easy to clean up.
+
+The `git wt clone` approach puts all work inside a worktree, even `main`. It's clear where new worktrees should be created. In progress work is always contained.

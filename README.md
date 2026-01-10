@@ -4,7 +4,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-A common reaction to discovering git worktrees is "oh my god, why didn't I know about this sooner???" The worktree system is incredibly powerful, but it is difficult to adopt due to its poor naming and lack of organizational clarity. 
+A common reaction to discovering git worktrees is "oh my god, why didn't I know about this sooner???" Although the worktree system is incredibly powerful, it is difficult to adopt due to lack of organizational clarity and inconvenient naming.
 
 git-wt aims to solve these problems:
 

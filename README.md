@@ -1,5 +1,8 @@
 # git-wt
+
 **An opinionated git alias to encourage all work inside worktrees.**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 A common reaction to discovering git worktrees is "oh my god, why didn't I know about this sooner???" The worktree system is incredibly powerful, but it is difficult to adopt due to its poor naming and lack of organizational clarity. 
 

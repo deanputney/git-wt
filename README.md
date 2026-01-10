@@ -17,7 +17,7 @@ git-wt allows you to create a new git alias `git wt` for working with worktrees.
 1. The addition of `git wt clone` for checking out a bare repository with worktree subfolders.
 2. Cleaner, short aliases for standard worktree commands. Might as well clean this up too.
 
-### Clone
+## Clone
 
 `git wt` adds an opinionated `clone` feature for organizing a new repository with worktrees. `git wt clone` creates an empty directory for your repository, checks out the `.git` directory inside it, and **leaves the rest of your directory as clean empty space for your worktree directories**.
 
@@ -58,7 +58,7 @@ With the standard clone the repository code files leave no clear space for your 
 The `git wt clone` approach puts all work inside a worktree, even `main`. It's clear where new worktrees should be created. In progress work is always contained.
 
 
-### Aliases
+## Aliases
 
 These new aliases are added:
 

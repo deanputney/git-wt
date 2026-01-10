@@ -37,7 +37,11 @@ The standard clone for a new repository:
 └── README.md
 ```
 
-A `git wt clone` clone:
+With the standard clone the repository code files leave no clear space for your worktrees to go. It also implies getting to work straight away in there, in a way that's not easy to clean up. 
+
+Common locations for worktree directories in this flow are to put them inside the current directory as `worktrees` (requiring .gitignore), as siblings (???), or in a hidden home directory like `~/.worktrees` (creating issues with multiple repositories). These solutions simply create more problems.
+
+Compare to a `git wt clone` clone:
 
 ```
 ~/git-wt-clone $ tree -a
@@ -53,9 +57,13 @@ A `git wt clone` clone:
     └── README.md
 ```
 
-With the standard clone the repository code files leave no clear space for your worktrees to go. It also implies getting to work straight away in there, in a way that's not easy to clean up.
+The `git wt clone` approach puts all work inside a worktree, even `main`. 
 
-The `git wt clone` approach puts all work inside a worktree, even `main`. It's clear where new worktrees should be created. In progress work is always contained.
+* It's clear where new worktrees should be created.
+* In progress work is always contained.
+* There are no conflicts with other repositories.
+
+The `git` command will continue to behave as normal in each worktree. Simply create a new worktree from the repo root with `git wt add`.
 
 
 ## Aliases

@@ -402,6 +402,71 @@ case "$1" in
     git worktree list
     ;;
 
+  setup)
+    shift
+
+    # Check for git (required)
+    if ! command -v git &> /dev/null; then
+      echo "Error: git is not installed"
+      echo "Please install git first: https://git-scm.com/downloads"
+      exit 1
+    fi
+
+    # Detect script location
+    SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+
+    # Determine install location
+    if [ -w /usr/local/bin ]; then
+      INSTALL_DIR="/usr/local/bin"
+    else
+      INSTALL_DIR="$HOME/bin"
+      mkdir -p "$INSTALL_DIR"
+
+      # Check if ~/bin is in PATH, warn if not
+      if [[ ":$PATH:" != *":$HOME/bin:"* ]]; then
+        echo ""
+        echo "Note: $HOME/bin is not in your PATH"
+        echo "Add this to your ~/.bashrc or ~/.zshrc:"
+        echo '  export PATH="$HOME/bin:$PATH"'
+        echo ""
+      fi
+    fi
+
+    # Check if git-wt already exists at install location
+    if [ -f "$INSTALL_DIR/git-wt" ] && [ "$SCRIPT_PATH" != "$INSTALL_DIR/git-wt" ]; then
+      echo "git-wt is already installed at $INSTALL_DIR/git-wt"
+      read -p "Do you want to overwrite it? (y/N) " -n 1 -r
+      echo
+      if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Setup cancelled."
+        exit 0
+      fi
+    fi
+
+    # Copy script
+    cp "$SCRIPT_PATH" "$INSTALL_DIR/git-wt"
+    chmod +x "$INSTALL_DIR/git-wt"
+
+    # Set up git alias
+    git config --global alias.wt '!git-wt'
+
+    # Check for git-crypt (optional)
+    echo ""
+    if command -v git-crypt &> /dev/null; then
+      echo "✓ git-crypt found (optional git-crypt features will work)"
+    else
+      echo "Note: git-crypt not found (optional - only needed for encrypted repos)"
+    fi
+
+    echo ""
+    echo "✓ git-wt installed to $INSTALL_DIR/git-wt"
+    echo "✓ Git alias configured: git config --global alias.wt '!git-wt'"
+    echo ""
+    echo "Setup complete! Try it out:"
+    echo "  git wt --help"
+    echo "  git wt clone <repo-url>"
+    ;;
+
   *)
     # Pass through to normal git worktree
     git worktree "$@"

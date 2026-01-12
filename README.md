@@ -1,10 +1,11 @@
 # git-wt
 git worktree workflows via a handy alias
 
-git-wt allows you to create a new git alias `git wt` for working with worktrees. It's simple and has two major benefits:
+git-wt allows you to create a new git alias `git wt` for working with worktrees. It's simple and has three major benefits:
 
 1. Cleaner, short aliases for standard worktree commands.
 2. The addition of `git wt clone` for checking out a bare repository with worktree subfolders.
+3. The addition of `git wt init` for converting an existing repository to the worktree structure.
 
 ### Aliases
 
@@ -55,3 +56,41 @@ A `git wt clone` clone:
 With the standard clone the repository code files leave no clear space for your worktrees to go. It also implies getting to work straight away in there, in a way that's not easy to clean up.
 
 The `git wt clone` approach puts all work inside a worktree, even `main`. It's clear where new worktrees should be created. In progress work is always contained.
+
+### Init
+
+Already have a repository and want to convert it to the worktree structure? `git wt init` will reorganize your existing repository into the same clean structure that `git wt clone` creates.
+
+Running `git wt init` from inside a standard git repository will:
+
+1. Convert your `.git` directory to a bare repository
+2. Move your current branch and working files into a worktree subdirectory
+3. Automatically create a worktree for the main/master branch
+4. Preserve all uncommitted changes, untracked files, and stashes
+
+For example, if you have a standard repository on branch `feature`:
+
+```
+~/my-repo $ tree -a -L 1
+.
+├── .git
+├── file1.txt
+└── file2.txt
+```
+
+After running `git wt init`:
+
+```
+~/my-repo $ tree -a -L 1
+.
+├── .git (now bare)
+├── feature
+│   ├── .git
+│   ├── file1.txt
+│   └── file2.txt
+└── main
+    ├── .git
+    └── # files from main branch
+```
+
+**Note**: `git wt init` will warn you if you have uncommitted changes or untracked files, and ask for confirmation before proceeding. All your work will be safely preserved in the worktree directory.

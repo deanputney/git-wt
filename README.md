@@ -115,3 +115,59 @@ git wt ls (alias for list)
 git wt rm (alias for remove)
 git wt a (alias for add)
 ```
+
+## Development
+
+### Running Tests
+
+This project uses [BATS (Bash Automated Testing System)](https://github.com/bats-core/bats-core) for testing.
+
+#### Prerequisites
+
+Install BATS:
+
+```bash
+# macOS
+brew install bats-core
+
+# Linux (Ubuntu/Debian)
+sudo apt-get install bats
+
+# Or install from source
+git clone https://github.com/bats-core/bats-core.git
+cd bats-core
+./install.sh /usr/local
+```
+
+#### Running Tests
+
+```bash
+# Run all tests
+bats tests/
+
+# Run specific test file
+bats tests/init.bats
+
+# Run tests with verbose output
+bats --tap tests/init.bats
+
+# Run specific test by line number
+bats tests/init.bats:42
+```
+
+#### Test Structure
+
+- `tests/init.bats` - Integration tests for `git wt init` command
+- `tests/test_helper/` - Helper functions and libraries
+- Tests run in isolated temporary directories
+- Each test creates a fresh git repository
+
+#### Writing Tests
+
+When adding new features:
+1. Add test cases to appropriate `.bats` file
+2. Use helper functions from `test_helpers.bash`
+3. Ensure tests clean up properly in `teardown()`
+4. Run tests locally before submitting PR
+
+Tests run automatically on all pull requests via GitHub Actions.

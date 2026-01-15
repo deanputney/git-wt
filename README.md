@@ -66,6 +66,46 @@ The `git wt clone` approach puts all work inside a worktree, even `main`.
 The `git` command will continue to behave as normal in each worktree. Simply create a new worktree from the repo root with `git wt add`.
 
 
+The `git wt clone` approach puts all work inside a worktree, even `main`. It's clear where new worktrees should be created. In progress work is always contained.
+
+### Init
+
+Already have a repository and want to convert it to the worktree structure? `git wt init` will reorganize your existing repository into the same clean structure that `git wt clone` creates.
+
+Running `git wt init` from inside a standard git repository will:
+
+1. Convert your `.git` directory to a bare repository
+2. Move your current branch and working files into a worktree subdirectory
+3. Automatically create a worktree for the main/master branch
+4. Preserve all uncommitted changes, untracked files, and stashes
+
+For example, if you have a standard repository on branch `feature`:
+
+```
+~/my-repo $ tree -a -L 1
+.
+├── .git
+├── file1.txt
+└── file2.txt
+```
+
+After running `git wt init`:
+
+```
+~/my-repo $ tree -a -L 1
+.
+├── .git (now bare)
+├── feature
+│   ├── .git
+│   ├── file1.txt
+│   └── file2.txt
+└── main
+    ├── .git
+    └── # files from main branch
+```
+
+**Note**: `git wt init` will warn you if you have uncommitted changes or untracked files, and ask for confirmation before proceeding. All your work will be safely preserved in the worktree directory.
+
 ## Aliases
 
 These new aliases are added:
@@ -75,3 +115,59 @@ git wt ls (alias for list)
 git wt rm (alias for remove)
 git wt a (alias for add)
 ```
+
+## Development
+
+### Running Tests
+
+This project uses [BATS (Bash Automated Testing System)](https://github.com/bats-core/bats-core) for testing.
+
+#### Prerequisites
+
+Install BATS:
+
+```bash
+# macOS
+brew install bats-core
+
+# Linux (Ubuntu/Debian)
+sudo apt-get install bats
+
+# Or install from source
+git clone https://github.com/bats-core/bats-core.git
+cd bats-core
+./install.sh /usr/local
+```
+
+#### Running Tests
+
+```bash
+# Run all tests
+bats tests/
+
+# Run specific test file
+bats tests/init.bats
+
+# Run tests with verbose output
+bats --tap tests/init.bats
+
+# Run specific test by line number
+bats tests/init.bats:42
+```
+
+#### Test Structure
+
+- `tests/init.bats` - Integration tests for `git wt init` command
+- `tests/test_helper/` - Helper functions and libraries
+- Tests run in isolated temporary directories
+- Each test creates a fresh git repository
+
+#### Writing Tests
+
+When adding new features:
+1. Add test cases to appropriate `.bats` file
+2. Use helper functions from `test_helpers.bash`
+3. Ensure tests clean up properly in `teardown()`
+4. Run tests locally before submitting PR
+
+Tests run automatically on all pull requests via GitHub Actions.

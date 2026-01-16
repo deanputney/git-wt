@@ -29,14 +29,18 @@ jobs:
             brew install bats-core
           fi
 
-      - name: Configure git
+      - name: Configure git for CI
         run: |
+          # CI environment can safely use global config
           git config --global user.name "Test User"
           git config --global user.email "test@example.com"
           git config --global init.defaultBranch main
 
-      - name: Run tests
+      - name: Run init tests
         run: bats tests/init.bats
+
+      - name: Run hook tests
+        run: bats tests/hooks.bats
 
       - name: Test summary
         if: always()

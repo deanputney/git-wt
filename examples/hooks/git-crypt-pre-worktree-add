@@ -1,0 +1,29 @@
+#!/bin/bash
+#
+# git-crypt pre-worktree-add hook
+#
+# This hook works around the known incompatibility between git-crypt and git worktree.
+# Install this to .git/hooks/pre-worktree-add to enable git-crypt support.
+#
+# INSTALLATION:
+#   cp examples/hooks/git-crypt-pre-worktree-add .git/hooks/pre-worktree-add
+#   cp examples/hooks/git-crypt-post-worktree-add .git/hooks/post-worktree-add
+#   chmod +x .git/hooks/pre-worktree-add .git/hooks/post-worktree-add
+
+# Check if git-crypt is in use
+if ! git config --get filter.git-crypt.smudge >/dev/null 2>&1; then
+  # git-crypt not configured, nothing to do
+  exit 0
+fi
+
+# Save the current filter.git-crypt.required setting
+required_setting=$(git config filter.git-crypt.required 2>/dev/null || echo "")
+
+# Store it for the post hook to restore
+export GIT_WT_SAVED_CRYPT_REQUIRED="$required_setting"
+
+# Temporarily disable git-crypt by removing the required flag
+# This prevents git worktree add from failing if git-crypt can't decrypt yet
+git config --unset filter.git-crypt.required || true
+
+exit 0

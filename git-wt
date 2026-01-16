@@ -134,7 +134,7 @@ case "$1" in
     shift
 
     # Run pre-worktree-add hook with the arguments that will be passed to git worktree add
-    run_hook "git-wt-pre-worktree-add" "$@"
+    run_hook "pre-worktree-add" "$@"
     hook_status=$?
 
     if [ $hook_status -ne 0 ]; then
@@ -155,7 +155,7 @@ case "$1" in
     fi
 
     # Run post-worktree-add hook with the worktree path and all original arguments
-    run_hook "git-wt-post-worktree-add" "$worktree_path" "$@"
+    run_hook "post-worktree-add" "$worktree_path" "$@"
     hook_status=$?
 
     if [ $hook_status -ne 0 ]; then

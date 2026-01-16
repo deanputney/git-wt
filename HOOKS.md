@@ -8,8 +8,8 @@ Starting in this experimental branch, `git-wt` supports custom hooks that run be
 
 Hooks are executable scripts placed in `.git/hooks/` with specific names:
 
-- **`git-wt-pre-worktree-add`** - Runs before `git worktree add`
-- **`git-wt-post-worktree-add`** - Runs after `git worktree add` succeeds
+- **`pre-worktree-add`** - Runs before `git worktree add`
+- **`post-worktree-add`** - Runs after `git worktree add` succeeds
 
 ### Hook Behavior
 
@@ -49,8 +49,8 @@ This branch includes `git-wt-git-crypt-helper`, a script that implements the git
 cd .git/hooks
 
 # Create symlinks to the helper script
-ln -s ../../git-wt-git-crypt-helper git-wt-pre-worktree-add
-ln -s ../../git-wt-git-crypt-helper git-wt-post-worktree-add
+ln -s ../../git-wt-git-crypt-helper pre-worktree-add
+ln -s ../../git-wt-git-crypt-helper post-worktree-add
 
 # Make the helper executable (the symlinks inherit this)
 chmod +x ../../git-wt-git-crypt-helper
@@ -62,16 +62,16 @@ The helper script auto-detects whether it's running as pre or post hook based on
 
 ```bash
 # Copy the helper twice
-cp git-wt-git-crypt-helper .git/hooks/git-wt-pre-worktree-add
-cp git-wt-git-crypt-helper .git/hooks/git-wt-post-worktree-add
+cp git-wt-git-crypt-helper .git/hooks/pre-worktree-add
+cp git-wt-git-crypt-helper .git/hooks/post-worktree-add
 
 # Make them executable
-chmod +x .git/hooks/git-wt-*-worktree-add
+chmod +x .git/hooks/*-worktree-add
 
 # Optional: Set explicit phase in each copy
-# Edit .git/hooks/git-wt-pre-worktree-add and add near the top:
+# Edit .git/hooks/pre-worktree-add and add near the top:
 #   HOOK_PHASE=pre
-# Edit .git/hooks/git-wt-post-worktree-add and add near the top:
+# Edit .git/hooks/post-worktree-add and add near the top:
 #   HOOK_PHASE=post
 ```
 
@@ -107,7 +107,7 @@ You can create your own hooks for other use cases:
 **Example: Notify on worktree creation**
 ```bash
 #!/bin/bash
-# .git/hooks/git-wt-post-worktree-add
+# .git/hooks/post-worktree-add
 
 worktree_path="$1"
 echo "✅ New worktree created at: $worktree_path"
@@ -117,7 +117,7 @@ echo "✅ New worktree created at: $worktree_path"
 **Example: Validate branch naming**
 ```bash
 #!/bin/bash
-# .git/hooks/git-wt-pre-worktree-add
+# .git/hooks/pre-worktree-add
 
 path="$1"
 branch="${2:-$1}"

@@ -36,10 +36,11 @@ teardown() {
 
 @test "pre-worktree-add hook runs before worktree creation" {
   # Setup: Create pre-hook that logs execution
+  local marker_file="$TEST_TEMP_DIR/.hook-pre-ran"
   mkdir -p .git/hooks
-  cat > .git/hooks/pre-worktree-add <<'EOF'
+  cat > .git/hooks/pre-worktree-add <<EOF
 #!/bin/bash
-echo "PRE_HOOK_RAN" > /tmp/git-wt-test-pre-hook-ran-$$
+echo "PRE_HOOK_RAN" > "$marker_file"
 exit 0
 EOF
   chmod +x .git/hooks/pre-worktree-add
@@ -49,16 +50,16 @@ EOF
 
   # Assert
   assert_success
-  [[ -f "/tmp/git-wt-test-pre-hook-ran-$$" ]]
-  rm -f "/tmp/git-wt-test-pre-hook-ran-$$"
+  [[ -f "$marker_file" ]]
 }
 
 @test "pre-worktree-add hook receives correct arguments" {
   # Setup: Create pre-hook that captures arguments
+  local args_file="$TEST_TEMP_DIR/.hook-args"
   mkdir -p .git/hooks
-  cat > .git/hooks/pre-worktree-add <<'EOF'
+  cat > .git/hooks/pre-worktree-add <<EOF
 #!/bin/bash
-echo "$@" > /tmp/git-wt-test-hook-args-$$
+echo "\$@" > "$args_file"
 exit 0
 EOF
   chmod +x .git/hooks/pre-worktree-add
@@ -68,9 +69,8 @@ EOF
 
   # Assert
   assert_success
-  local args=$(cat /tmp/git-wt-test-hook-args-$$)
+  local args=$(cat "$args_file")
   [[ "$args" == "feature-branch" ]]
-  rm -f "/tmp/git-wt-test-hook-args-$$"
 }
 
 @test "pre-worktree-add hook can abort worktree creation" {
@@ -117,10 +117,11 @@ EOF
 
 @test "post-worktree-add hook runs after worktree creation" {
   # Setup: Create post-hook that logs execution
+  local marker_file="$TEST_TEMP_DIR/.hook-post-ran"
   mkdir -p .git/hooks
-  cat > .git/hooks/post-worktree-add <<'EOF'
+  cat > .git/hooks/post-worktree-add <<EOF
 #!/bin/bash
-echo "POST_HOOK_RAN" > /tmp/git-wt-test-post-hook-ran-$$
+echo "POST_HOOK_RAN" > "$marker_file"
 exit 0
 EOF
   chmod +x .git/hooks/post-worktree-add
@@ -130,17 +131,17 @@ EOF
 
   # Assert
   assert_success
-  [[ -f "/tmp/git-wt-test-post-hook-ran-$$" ]]
+  [[ -f "$marker_file" ]]
   [[ -d "feature" ]]  # Worktree was created
-  rm -f "/tmp/git-wt-test-post-hook-ran-$$"
 }
 
 @test "post-worktree-add hook receives worktree path as first argument" {
   # Setup: Create post-hook that captures arguments
+  local path_file="$TEST_TEMP_DIR/.hook-path"
   mkdir -p .git/hooks
-  cat > .git/hooks/post-worktree-add <<'EOF'
+  cat > .git/hooks/post-worktree-add <<EOF
 #!/bin/bash
-echo "$1" > /tmp/git-wt-test-hook-path-$$
+echo "\$1" > "$path_file"
 exit 0
 EOF
   chmod +x .git/hooks/post-worktree-add
@@ -150,9 +151,8 @@ EOF
 
   # Assert
   assert_success
-  local path=$(cat /tmp/git-wt-test-hook-path-$$)
+  local path=$(cat "$path_file")
   [[ "$path" == "feature-branch" ]]
-  rm -f "/tmp/git-wt-test-hook-path-$$"
 }
 
 @test "post-worktree-add hook failure reports error but worktree exists" {
@@ -183,18 +183,19 @@ EOF
 
 @test "both pre and post hooks run in correct order" {
   # Setup: Create both hooks that log execution
+  local order_file="$TEST_TEMP_DIR/.hook-order"
   mkdir -p .git/hooks
 
-  cat > .git/hooks/pre-worktree-add <<'EOF'
+  cat > .git/hooks/pre-worktree-add <<EOF
 #!/bin/bash
-echo "PRE" >> /tmp/git-wt-test-hook-order-$$
+echo "PRE" >> "$order_file"
 exit 0
 EOF
   chmod +x .git/hooks/pre-worktree-add
 
-  cat > .git/hooks/post-worktree-add <<'EOF'
+  cat > .git/hooks/post-worktree-add <<EOF
 #!/bin/bash
-echo "POST" >> /tmp/git-wt-test-hook-order-$$
+echo "POST" >> "$order_file"
 exit 0
 EOF
   chmod +x .git/hooks/post-worktree-add
@@ -204,13 +205,13 @@ EOF
 
   # Assert
   assert_success
-  local order=$(cat /tmp/git-wt-test-hook-order-$$)
+  local order=$(cat "$order_file")
   [[ "$order" == $'PRE\nPOST' ]]
-  rm -f "/tmp/git-wt-test-hook-order-$$"
 }
 
 @test "post hook does not run if pre hook fails" {
   # Setup: Create both hooks, pre fails
+  local marker_file="$TEST_TEMP_DIR/.post-should-not-run"
   mkdir -p .git/hooks
 
   cat > .git/hooks/pre-worktree-add <<'EOF'
@@ -219,9 +220,9 @@ exit 1
 EOF
   chmod +x .git/hooks/pre-worktree-add
 
-  cat > .git/hooks/post-worktree-add <<'EOF'
+  cat > .git/hooks/post-worktree-add <<EOF
 #!/bin/bash
-echo "POST_RAN" > /tmp/git-wt-test-post-should-not-run-$$
+echo "POST_RAN" > "$marker_file"
 exit 0
 EOF
   chmod +x .git/hooks/post-worktree-add
@@ -231,7 +232,7 @@ EOF
 
   # Assert
   assert_failure
-  [[ ! -f "/tmp/git-wt-test-post-should-not-run-$$" ]]
+  [[ ! -f "$marker_file" ]]
 }
 
 ################################################################################
@@ -283,10 +284,11 @@ EOF
 
 @test "hooks work from common git directory in worktrees" {
   # Setup: Create hook in main .git/hooks
+  local marker_file="$TEST_TEMP_DIR/.hook-from-worktree"
   mkdir -p .git/hooks
-  cat > .git/hooks/pre-worktree-add <<'EOF'
+  cat > .git/hooks/pre-worktree-add <<EOF
 #!/bin/bash
-echo "HOOK_FROM_COMMON_DIR" > /tmp/git-wt-test-common-dir-$$
+echo "HOOK_FROM_COMMON_DIR" > "$marker_file"
 exit 0
 EOF
   chmod +x .git/hooks/pre-worktree-add
@@ -300,8 +302,7 @@ EOF
 
   # Assert - hook should still work from within worktree
   assert_success
-  [[ -f "/tmp/git-wt-test-common-dir-$$" ]]
-  rm -f "/tmp/git-wt-test-common-dir-$$"
+  [[ -f "$marker_file" ]]
 }
 
 ################################################################################

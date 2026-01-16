@@ -113,6 +113,219 @@ case "$1" in
     echo "Primary branch '$primary_branch' checked out at $folder_name/$primary_branch/"
     ;;
 
+  i|init)
+    shift
+
+    # Pre-flight checks
+
+    # 1. Verify we're in a git repository
+    if ! git rev-parse --git-dir >/dev/null 2>&1; then
+      echo "Error: Not a git repository"
+      exit 1
+    fi
+
+    # 2. Check if already bare
+    if [ "$(git rev-parse --is-bare-repository)" = "true" ]; then
+      echo "Error: Repository is already bare"
+      exit 1
+    fi
+
+    # 3. Check if we're inside a worktree structure
+    git_dir=$(git rev-parse --git-dir)
+    if echo "$git_dir" | grep -q "\.git/worktrees"; then
+      echo "Error: Already in a worktree-based repository structure"
+      echo "This command only works on standard git repositories"
+      exit 1
+    fi
+
+    # 4. Check for existing worktrees
+    worktree_count=$(git worktree list | wc -l | tr -d ' ')
+    if [ "$worktree_count" -gt 1 ]; then
+      echo "Error: Repository already has worktrees"
+      echo "This command only works on repositories without existing worktrees"
+      git worktree list
+      exit 1
+    fi
+
+    # 5. Get current branch (or detect detached HEAD)
+    current_branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+    if [ -z "$current_branch" ]; then
+      echo "Error: Repository is in detached HEAD state"
+      echo "Please checkout a branch before running git wt init"
+      exit 1
+    fi
+
+    # 6. Check for uncommitted changes or untracked files
+    has_changes=false
+    if ! git diff-index --quiet HEAD -- 2>/dev/null; then
+      has_changes=true
+    fi
+    if [ -n "$(git ls-files --others --exclude-standard)" ]; then
+      has_changes=true
+    fi
+
+    if [ "$has_changes" = true ]; then
+      echo "Warning: You have uncommitted changes or untracked files"
+      echo ""
+      git status --short
+      echo ""
+      echo "These will be preserved in the '$current_branch' worktree after conversion"
+      echo ""
+      read -p "Continue with conversion? (y/N): " confirm
+      if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+        echo "Aborted"
+        exit 0
+      fi
+    fi
+
+    # 7. Check for stashes (informational)
+    stash_count=$(git stash list 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$stash_count" -gt 0 ]; then
+      echo "Note: Found $stash_count stash(es). These will be preserved."
+    fi
+
+    # Get repository root
+    repo_root=$(git rev-parse --show-toplevel)
+    cd "$repo_root" || exit 1
+
+    # Set up error handling
+    temp_bare=""
+    temp_work=""
+    temp_index=""
+
+    cleanup_on_error() {
+      echo ""
+      echo "Error occurred during conversion!"
+      if [ -n "$temp_work" ] && [ -d "$temp_work" ]; then
+        echo "Your files are preserved in: $temp_work"
+        echo "Your .git directory has been modified. To recover:"
+        echo "  1. Restore from backup if you have one"
+        echo "  2. Or manually move files back from $temp_work"
+      fi
+      if [ -n "$temp_bare" ] && [ -d "$temp_bare" ]; then
+        rm -rf "$temp_bare"
+      fi
+      if [ -n "$temp_index" ] && [ -f "$temp_index" ]; then
+        rm -f "$temp_index"
+      fi
+      exit 1
+    }
+
+    trap cleanup_on_error ERR
+
+    echo "Converting repository to worktree structure..."
+    echo ""
+
+    # Create temporary bare clone (preserves all refs, stashes, config)
+    temp_bare=".git-wt-temp-bare-$$"
+    echo "Creating bare repository..."
+    git clone --bare . "$temp_bare" 2>&1 | grep -v "^Cloning into" || true
+
+    # Preserve the index file from the original .git
+    temp_index=".git-wt-temp-index-$$"
+    cp .git/index "$temp_index" 2>/dev/null || true
+
+    # Move all working files to temporary directory
+    temp_work=".git-wt-temp-work-$$"
+    mkdir "$temp_work"
+    echo "Preserving working files..."
+    find . -maxdepth 1 ! -name . ! -name .. ! -name .git ! -name "$temp_bare" ! -name "$temp_work" ! -name "$temp_index" \
+      -exec mv {} "$temp_work/" \; 2>/dev/null || true
+
+    # Preserve stash refs if they exist (git clone --bare doesn't copy them)
+    temp_stash_dir=""
+    if [ -f .git/refs/stash ]; then
+      temp_stash_dir=".git-wt-temp-stash-$$"
+      mkdir -p "$temp_stash_dir"
+      # Copy stash ref
+      cp .git/refs/stash "$temp_stash_dir/stash"
+      # Copy stash reflog (it's a file, not a directory)
+      if [ -f .git/logs/refs/stash ]; then
+        mkdir -p "$temp_stash_dir/logs"
+        cp .git/logs/refs/stash "$temp_stash_dir/logs/stash"
+      fi
+    fi
+
+    # Replace .git with bare repository
+    echo "Reorganizing repository structure..."
+    rm -rf .git
+    mv "$temp_bare" .git
+
+    # Restore stash refs if they were preserved
+    if [ -n "$temp_stash_dir" ] && [ -d "$temp_stash_dir" ]; then
+      if [ -f "$temp_stash_dir/stash" ]; then
+        cp "$temp_stash_dir/stash" .git/refs/stash
+      fi
+      if [ -f "$temp_stash_dir/logs/stash" ]; then
+        mkdir -p .git/logs/refs
+        cp "$temp_stash_dir/logs/stash" .git/logs/refs/stash
+      fi
+      rm -rf "$temp_stash_dir"
+    fi
+
+    # Configure bare repo properly
+    git config --bool core.bare true
+
+    # Set up fetch refspec if remote exists
+    if git config remote.origin.url >/dev/null 2>&1; then
+      git config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
+    fi
+
+    # Create worktree for current branch from preserved files
+    echo "Creating worktree for '$current_branch' branch..."
+    mv "$temp_work" "$current_branch"
+
+    # Register as worktree manually (git worktree add doesn't work well with existing files)
+    mkdir -p .git/worktrees/"$current_branch"
+    echo "gitdir: $repo_root/.git/worktrees/$current_branch" > "$current_branch/.git"
+    echo "$repo_root/$current_branch" > .git/worktrees/"$current_branch"/gitdir
+    echo "ref: refs/heads/$current_branch" > .git/worktrees/"$current_branch"/HEAD
+
+    # Copy common git files to worktree admin directory
+    touch .git/worktrees/"$current_branch"/commondir
+    echo "../.." > .git/worktrees/"$current_branch"/commondir
+
+    # Restore the index file to preserve staging area state
+    if [ -f "$temp_index" ]; then
+      mv "$temp_index" .git/worktrees/"$current_branch"/index
+    fi
+
+    # Detect primary branch - check for main/master explicitly
+    primary_branch=""
+    if git rev-parse --verify refs/heads/main >/dev/null 2>&1; then
+      primary_branch="main"
+    elif git rev-parse --verify refs/heads/master >/dev/null 2>&1; then
+      primary_branch="master"
+    fi
+
+    # Create worktree for primary branch (if different from current)
+    if [ -n "$primary_branch" ] && [ "$primary_branch" != "$current_branch" ]; then
+      echo "Creating worktree for '$primary_branch' branch..."
+      git worktree add "$primary_branch" "$primary_branch" 2>&1 | grep -v "^Preparing worktree" || true
+    fi
+
+    # Clear trap
+    trap - ERR
+
+    # Success message
+    echo ""
+    echo "Successfully converted to worktree structure!"
+    echo ""
+    echo "Repository structure:"
+    echo "  .git/                    (bare repository)"
+    echo "  $current_branch/         (worktree - your current branch)"
+    if [ -n "$primary_branch" ] && [ "$primary_branch" != "$current_branch" ]; then
+      echo "  $primary_branch/         (worktree - primary branch)"
+    fi
+    echo ""
+    if [ "$has_changes" = true ]; then
+      echo "Your uncommitted changes have been preserved in $current_branch/"
+      echo ""
+    fi
+    echo "Worktree list:"
+    git worktree list
+    ;;
+
   *)
     # Pass through to normal git worktree
     git worktree "$@"

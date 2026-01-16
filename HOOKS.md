@@ -38,46 +38,26 @@ git-crypt and git worktree have a known incompatibility (unresolved as of git-cr
 
 ### The Solution
 
-This branch includes `git-wt-git-crypt-helper`, a script that implements the git-crypt workaround as hooks instead of inline in `git-wt`.
+Ready-to-use hook examples are provided in `examples/hooks/` that implement the git-crypt workaround.
 
 ### Installation for git-crypt Users
 
-**Option 1: Symlink approach (recommended)**
+From your repository root:
 
 ```bash
-# From your repository root
-cd .git/hooks
-
-# Create symlinks to the helper script
-ln -s ../../git-wt-git-crypt-helper pre-worktree-add
-ln -s ../../git-wt-git-crypt-helper post-worktree-add
-
-# Make the helper executable (the symlinks inherit this)
-chmod +x ../../git-wt-git-crypt-helper
-```
-
-The helper script auto-detects whether it's running as pre or post hook based on its name.
-
-**Option 2: Copy and configure**
-
-```bash
-# Copy the helper twice
-cp git-wt-git-crypt-helper .git/hooks/pre-worktree-add
-cp git-wt-git-crypt-helper .git/hooks/post-worktree-add
+# Copy the hook examples to your hooks directory
+cp examples/hooks/git-crypt-pre-worktree-add .git/hooks/pre-worktree-add
+cp examples/hooks/git-crypt-post-worktree-add .git/hooks/post-worktree-add
 
 # Make them executable
-chmod +x .git/hooks/*-worktree-add
-
-# Optional: Set explicit phase in each copy
-# Edit .git/hooks/pre-worktree-add and add near the top:
-#   HOOK_PHASE=pre
-# Edit .git/hooks/post-worktree-add and add near the top:
-#   HOOK_PHASE=post
+chmod +x .git/hooks/pre-worktree-add .git/hooks/post-worktree-add
 ```
+
+That's it! The hooks will now handle git-crypt automatically when you run `git-wt add`.
 
 ### How It Works
 
-The helper script:
+The hooks work together:
 
 1. **Pre hook:** Detects if git-crypt is configured, saves settings, temporarily disables `filter.git-crypt.required`
 2. **git-wt:** Creates the worktree normally (no special flags needed)
@@ -105,20 +85,20 @@ git crypt status
 You can create your own hooks for other use cases:
 
 **Example: Notify on worktree creation**
+
+Create `.git/hooks/post-worktree-add`:
 ```bash
 #!/bin/bash
-# .git/hooks/post-worktree-add
-
 worktree_path="$1"
 echo "✅ New worktree created at: $worktree_path"
 # Send notification, update IDE workspace, etc.
 ```
 
 **Example: Validate branch naming**
+
+Create `.git/hooks/pre-worktree-add`:
 ```bash
 #!/bin/bash
-# .git/hooks/pre-worktree-add
-
 path="$1"
 branch="${2:-$1}"
 
@@ -126,6 +106,11 @@ if [[ ! "$branch" =~ ^(feature|bugfix|hotfix)/ ]]; then
   echo "Error: Branch must start with feature/, bugfix/, or hotfix/" >&2
   exit 1
 fi
+```
+
+Don't forget to make your hooks executable:
+```bash
+chmod +x .git/hooks/pre-worktree-add .git/hooks/post-worktree-add
 ```
 
 ## Limitations

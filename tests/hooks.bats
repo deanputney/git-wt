@@ -10,14 +10,21 @@ setup() {
   TEST_TEMP_DIR="$(mktemp -d)"
   cd "$TEST_TEMP_DIR"
 
-  # Configure git globally for tests
-  git config --global user.name "Test User"
-  git config --global user.email "test@example.com"
-  git config --global init.defaultBranch main
+  # Configure git via environment variables (doesn't touch global config)
+  export GIT_AUTHOR_NAME="Test User"
+  export GIT_AUTHOR_EMAIL="test@example.com"
+  export GIT_COMMITTER_NAME="Test User"
+  export GIT_COMMITTER_EMAIL="test@example.com"
 
   # Initialize a bare repo with main worktree
   bash "$GIT_WT_SCRIPT" init >/dev/null 2>&1
   cd main
+
+  # Set local config for this repo
+  git config user.name "Test User"
+  git config user.email "test@example.com"
+  git config init.defaultBranch main
+
   echo "test content" > README.md
   git add README.md
   git commit -q -m "Initial commit"

@@ -23,19 +23,74 @@ teardown() {
 }
 
 ################################################################################
-# A. Pre-flight Validation Tests
+# A. New Repository Initialization Tests
 ################################################################################
 
-@test "init fails when not in a git repository" {
-  # Setup: Empty directory (no git init)
+@test "init creates new repo in empty directory" {
+  # Setup: Empty directory (no git init, no files)
 
   # Run
   run bash "$GIT_WT_SCRIPT" init
 
   # Assert
-  assert_failure
-  assert_output --partial "Error: Not a git repository"
+  assert_success
+  assert_output --partial "Initializing new git-wt repository"
+  assert_output --partial "Successfully initialized"
+
+  # Verify .git is bare
+  [[ "$(git config core.bare)" == "true" ]]
+
+  # Verify main/ worktree exists
+  [[ -d "main" ]]
+  [[ -f "main/.git" ]]
+
+  # Verify initial commit exists
+  cd main
+  run git log --oneline
+  assert_output --partial "Initial commit"
+
+  # Verify clean working tree
+  run git status --short
+  assert_output ""
 }
+
+@test "init creates new repo with existing files" {
+  # Setup: Directory with files (no git init)
+  echo "# Test Project" > README.md
+  echo "*.log" > .gitignore
+  echo "content" > file.txt
+
+  # Run
+  run bash "$GIT_WT_SCRIPT" init
+
+  # Assert
+  assert_success
+  assert_output --partial "Found existing files"
+  assert_output --partial "Successfully initialized"
+
+  # Verify files exist in main/ worktree
+  [[ -f "main/README.md" ]]
+  [[ -f "main/.gitignore" ]]
+  [[ -f "main/file.txt" ]]
+
+  # Verify files are committed
+  cd main
+  run git log --oneline
+  assert_output --partial "Initial commit"
+
+  # Verify clean working tree
+  run git status --short
+  assert_output ""
+
+  # Verify file contents preserved
+  grep -q "# Test Project" README.md
+  grep -q "*.log" .gitignore
+  grep -q "content" file.txt
+}
+
+################################################################################
+# B. Pre-flight Validation Tests (Existing Repos)
+################################################################################
 
 @test "init fails when repository is already bare" {
   # Setup: Create bare repo
@@ -107,7 +162,7 @@ teardown() {
 }
 
 ################################################################################
-# B. Happy Path Tests
+# C. Happy Path Tests (Existing Repos)
 ################################################################################
 
 @test "init converts clean repo with main branch successfully" {
@@ -274,7 +329,7 @@ teardown() {
 }
 
 ################################################################################
-# C. State Preservation Tests
+# D. State Preservation Tests
 ################################################################################
 
 @test "init preserves uncommitted changes" {
@@ -447,7 +502,7 @@ teardown() {
 }
 
 ################################################################################
-# D. Edge Cases
+# E. Edge Cases
 ################################################################################
 
 @test "init handles branch names with slashes" {

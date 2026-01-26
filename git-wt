@@ -64,6 +64,8 @@ init_new_repo() {
   echo "Creating worktree for '$primary_branch' branch..."
   if [ "$has_files" = true ]; then
     # Move preserved files to main/ worktree
+    # Create parent directories if branch name contains slashes (e.g., feature/foo)
+    mkdir -p "$(dirname "$primary_branch")"
     mv "$temp_work" "$primary_branch"
 
     # Register as worktree manually
@@ -349,6 +351,8 @@ case "$1" in
 
     # Create worktree for current branch from preserved files
     echo "Creating worktree for '$current_branch' branch..."
+    # Create parent directories if branch name contains slashes (e.g., feature/foo)
+    mkdir -p "$(dirname "$current_branch")"
     mv "$temp_work" "$current_branch"
 
     # Register as worktree manually (git worktree add doesn't work well with existing files)

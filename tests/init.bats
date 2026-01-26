@@ -506,7 +506,6 @@ teardown() {
 ################################################################################
 
 @test "init handles branch names with slashes" {
-  skip "TODO: Fix directory creation for branch names with slashes"
   # Setup: Branch with special characters
   setup_test_repo
   create_branch "feature/test-123"
@@ -520,6 +519,166 @@ teardown() {
   # Verify directory created (slashes become subdirectories)
   [[ -d "feature" ]]
   [[ -d "feature/test-123" ]]
+
+  # Verify worktree is functional
+  cd feature/test-123
+  run git status
+  assert_success
+  assert_output --partial "On branch feature/test-123"
+}
+
+@test "init handles slash branches with existing main and files" {
+  # Setup: Repository with both main and a slash branch with uncommitted files
+  setup_test_repo
+  echo "extra content" >> README.md
+  create_branch "hotfix/urgent-fix"
+  echo "hotfix change" >> README.md
+
+  # Run
+  run bash "$GIT_WT_SCRIPT" init
+
+  # Assert
+  assert_success
+
+  # Verify both worktrees created properly
+  [[ -d "main" ]]
+  [[ -d "hotfix" ]]
+  [[ -d "hotfix/urgent-fix" ]]
+
+  # Verify current branch (hotfix) has uncommitted changes
+  cd hotfix/urgent-fix
+  run git status --short
+  assert_output --partial "M README.md"
+}
+
+@test "init handles deeply nested branch names with multiple slashes" {
+  # Setup: Branch with multiple directory levels
+  setup_test_repo
+  create_branch "team/frontend/feature/new-ui"
+
+  # Run
+  run bash "$GIT_WT_SCRIPT" init
+
+  # Assert
+  assert_success
+
+  # Verify all parent directories are created
+  [[ -d "team" ]]
+  [[ -d "team/frontend" ]]
+  [[ -d "team/frontend/feature" ]]
+  [[ -d "team/frontend/feature/new-ui" ]]
+
+  # Verify worktree is functional
+  cd team/frontend/feature/new-ui
+  run git status
+  assert_success
+  assert_output --partial "On branch team/frontend/feature/new-ui"
+
+  # Verify files are present
+  [[ -f "README.md" ]]
+}
+
+@test "init preserves uncommitted changes in slash branch names" {
+  # Setup: Branch with slashes and uncommitted changes
+  setup_test_repo
+  create_branch "bugfix/issue-456"
+  add_uncommitted_changes
+  add_untracked_files
+
+  # Run
+  run bash "$GIT_WT_SCRIPT" init
+
+  # Assert
+  assert_success
+
+  # Verify directory structure
+  [[ -d "bugfix" ]]
+  [[ -d "bugfix/issue-456" ]]
+
+  # Verify uncommitted changes preserved
+  cd bugfix/issue-456
+  run git status --short
+  assert_output --partial "M README.md"
+  assert_output --partial "?? newfile.txt"
+  assert_output --partial "?? untracked.txt"
+}
+
+@test "init creates main worktree alongside slash branch worktree" {
+  # Setup: Repository on slash branch with main also existing
+  setup_test_repo
+  create_branch "feature/experiment"
+  echo "experiment change" >> README.md
+  git add README.md
+  git commit -q -m "Experiment commit"
+
+  # Run
+  run bash "$GIT_WT_SCRIPT" init
+
+  # Assert
+  assert_success
+
+  # Verify both worktrees exist
+  [[ -d "feature" ]]
+  [[ -d "feature/experiment" ]]
+  [[ -d "main" ]]
+
+  # Verify both are functional
+  cd feature/experiment
+  run git status
+  assert_success
+  assert_output --partial "On branch feature/experiment"
+
+  cd ../../main
+  run git status
+  assert_success
+  assert_output --partial "On branch main"
+}
+
+@test "init handles user namespace branch pattern" {
+  # Setup: Common pattern user/feature-name
+  setup_test_repo
+  create_branch "alice/new-dashboard"
+
+  # Run
+  run bash "$GIT_WT_SCRIPT" init
+
+  # Assert
+  assert_success
+
+  # Verify directory structure
+  [[ -d "alice" ]]
+  [[ -d "alice/new-dashboard" ]]
+
+  # Verify worktree is functional and can create commits
+  cd alice/new-dashboard
+  echo "new file" > dashboard.html
+  git add dashboard.html
+  run git commit -m "Add dashboard"
+  assert_success
+}
+
+@test "init handles common branch naming patterns with slashes" {
+  # Setup: Test various common patterns
+  setup_test_repo
+  create_branch "release/v1.2.3"
+
+  # Run
+  run bash "$GIT_WT_SCRIPT" init
+
+  # Assert
+  assert_success
+
+  # Verify structure
+  [[ -d "release" ]]
+  [[ -d "release/v1.2.3" ]]
+
+  # Verify git operations work
+  cd release/v1.2.3
+  run git branch --show-current
+  assert_output "release/v1.2.3"
+
+  # Verify files from original repo are present
+  [[ -f "README.md" ]]
 }
 
 @test "init handles long branch names" {

@@ -1,0 +1,56 @@
+#!/bin/bash
+#
+# git-crypt post-worktree-add hook
+#
+# This hook works around the known incompatibility between git-crypt and git worktree.
+# Install this to .git/hooks/post-worktree-add to enable git-crypt support.
+#
+# INSTALLATION:
+#   cp examples/hooks/git-crypt-pre-worktree-add .git/hooks/pre-worktree-add
+#   cp examples/hooks/git-crypt-post-worktree-add .git/hooks/post-worktree-add
+#   chmod +x .git/hooks/pre-worktree-add .git/hooks/post-worktree-add
+
+# Check if git-crypt is in use
+if ! git config --get filter.git-crypt.smudge >/dev/null 2>&1; then
+  # git-crypt not configured, nothing to do
+  exit 0
+fi
+
+# First argument is the worktree path
+worktree_path="$1"
+
+if [ -z "$worktree_path" ]; then
+  echo "git-crypt post-worktree-add: No worktree path provided" >&2
+  exit 1
+fi
+
+# Restore the required setting if it existed
+if [ -n "$GIT_WT_SAVED_CRYPT_REQUIRED" ]; then
+  git config filter.git-crypt.required "$GIT_WT_SAVED_CRYPT_REQUIRED"
+fi
+
+# Now handle the worktree: set filters to cat, checkout encrypted, then unlock
+
+# In the worktree, disable filters temporarily to get encrypted files
+git -C "$worktree_path" config filter.git-crypt.smudge "cat"
+git -C "$worktree_path" config filter.git-crypt.clean "cat"
+
+# This checkout will get the files in their encrypted state
+git -C "$worktree_path" reset --hard HEAD
+
+# Re-enable proper filters
+git -C "$worktree_path" config --unset filter.git-crypt.smudge
+git -C "$worktree_path" config --unset filter.git-crypt.clean
+
+# Unlock git-crypt in the new worktree
+if ! git -C "$worktree_path" crypt unlock 2>/dev/null; then
+  echo "git-crypt post-worktree-add: Warning: Could not unlock git-crypt in $worktree_path" >&2
+  echo "You may need to run 'git crypt unlock' manually in the worktree" >&2
+  # Don't fail - the worktree was created successfully
+  exit 0
+fi
+
+# Final checkout to decrypt all files
+git -C "$worktree_path" reset --hard HEAD
+
+exit 0

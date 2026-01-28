@@ -1,0 +1,66 @@
+name: Update Homebrew Formula
+
+on:
+  release:
+    types: [published]
+  # Alternatively, trigger on pushes to main:
+  # push:
+  #   branches: [main]
+  #   paths:
+  #     - 'Formula/git-wt.rb'
+
+jobs:
+  update-formula:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout git-wt repository
+        uses: actions/checkout@v4
+        with:
+          path: git-wt
+
+      - name: Checkout homebrew-tap repository
+        uses: actions/checkout@v4
+        with:
+          repository: deanputney/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: Calculate SHA256 and update formula
+        run: |
+          cd git-wt
+
+          # Get the version from the release tag
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "Version: $VERSION"
+
+          # Download and calculate SHA256 of the release tarball
+          TARBALL_URL="https://github.com/deanputney/git-wt/archive/refs/tags/v${VERSION}.tar.gz"
+          SHA256=$(curl -Ls "$TARBALL_URL" | shasum -a 256 | cut -d' ' -f1)
+          echo "SHA256: $SHA256"
+
+          # Update the formula
+          cd ../homebrew-tap
+
+          # Copy the formula template from git-wt repo
+          cp ../git-wt/Formula/git-wt.rb Formula/git-wt.rb
+
+          # Replace template placeholders with actual values
+          sed -i "s|PLACEHOLDER_VERSION|${VERSION}|g" Formula/git-wt.rb
+          sed -i "s|PLACEHOLDER_URL|${TARBALL_URL}|g" Formula/git-wt.rb
+          sed -i "s|PLACEHOLDER_SHA256|${SHA256}|g" Formula/git-wt.rb
+
+      - name: Commit and push to homebrew-tap
+        run: |
+          cd homebrew-tap
+
+          git config user.name "github-actions[bot] git-wt"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add Formula/git-wt.rb
+
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update git-wt formula to ${GITHUB_REF#refs/tags/v}"
+            git push
+          fi

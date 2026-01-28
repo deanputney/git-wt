@@ -497,7 +497,6 @@ case "$1" in
     echo "✓ Git alias configured: git config --global alias.wt '!git-wt'"
     echo ""
     echo "Setup complete! Try it out:"
-    echo "  git wt --help"
     echo "  git wt clone <repo-url>"
     echo ""
     echo "Reorganize an existing repository with worktrees:"

@@ -465,6 +465,9 @@ case "$1" in
     echo "Setup complete! Try it out:"
     echo "  git wt --help"
     echo "  git wt clone <repo-url>"
+    echo ""
+    echo "Reorganize an existing repository with worktrees:"
+    echo "  git wt init"
     ;;
 
   *)

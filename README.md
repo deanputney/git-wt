@@ -149,6 +149,7 @@ git config --global alias.wt '!git-wt'
 ```
 
 3. Verify installation:
+TODO: This needs to be set up.
 ```bash
 git wt --help
 ```

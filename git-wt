@@ -191,6 +191,30 @@ install_hooks() {
   echo "The hooks will now run automatically when you use 'git wt add'."
 }
 
+# Helper function to set up git alias configuration
+setup_git_config() {
+  # Check if alias is already configured
+  if git config --global alias.wt >/dev/null 2>&1; then
+    local current_alias=$(git config --global alias.wt)
+    if [ "$current_alias" = "!git-wt" ]; then
+      echo "✓ Git alias already configured: git config --global alias.wt '!git-wt'"
+      return 0
+    else
+      echo "Warning: git alias 'wt' is already set to: $current_alias"
+      read -p "Do you want to overwrite it with '!git-wt'? (y/N) " -n 1 -r
+      echo
+      if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Skipped git alias configuration."
+        return 0
+      fi
+    fi
+  fi
+
+  # Set up git alias
+  git config --global alias.wt '!git-wt'
+  echo "✓ Git alias configured: git config --global alias.wt '!git-wt'"
+}
+
 init_new_repo() {
   echo "Initializing new git-wt repository..."
   echo ""
@@ -255,16 +279,21 @@ init_new_repo() {
   echo "Creating worktree for '$primary_branch' branch..."
   if [ "$has_files" = true ]; then
     # Move preserved files to main/ worktree
+    # Create parent directories if branch name contains slashes (e.g., feature/foo)
+    mkdir -p "$(dirname "$primary_branch")"
     mv "$temp_work" "$primary_branch"
 
     # Register as worktree manually
     repo_root=$(pwd)
-    mkdir -p .git/worktrees/"$primary_branch"
-    echo "gitdir: $repo_root/.git/worktrees/$primary_branch" > "$primary_branch/.git"
-    echo "$repo_root/$primary_branch" > .git/worktrees/"$primary_branch"/gitdir
-    echo "ref: refs/heads/$primary_branch" > .git/worktrees/"$primary_branch"/HEAD
-    touch .git/worktrees/"$primary_branch"/commondir
-    echo "../.." > .git/worktrees/"$primary_branch"/commondir
+    # Convert slashes to dashes for worktree metadata directory name
+    # (git encodes slashes when creating worktree metadata)
+    worktree_name=$(echo "$primary_branch" | tr '/' '-')
+    mkdir -p .git/worktrees/"$worktree_name"
+    echo "gitdir: $repo_root/.git/worktrees/$worktree_name" > "$primary_branch/.git"
+    echo "$repo_root/$primary_branch" > .git/worktrees/"$worktree_name"/gitdir
+    echo "ref: refs/heads/$primary_branch" > .git/worktrees/"$worktree_name"/HEAD
+    touch .git/worktrees/"$worktree_name"/commondir
+    echo "../.." > .git/worktrees/"$worktree_name"/commondir
 
     # Reset the worktree to sync with the commit
     cd "$primary_branch"
@@ -546,21 +575,26 @@ case "$1" in
 
     # Create worktree for current branch from preserved files
     echo "Creating worktree for '$current_branch' branch..."
+    # Create parent directories if branch name contains slashes (e.g., feature/foo)
+    mkdir -p "$(dirname "$current_branch")"
     mv "$temp_work" "$current_branch"
 
     # Register as worktree manually (git worktree add doesn't work well with existing files)
-    mkdir -p .git/worktrees/"$current_branch"
-    echo "gitdir: $repo_root/.git/worktrees/$current_branch" > "$current_branch/.git"
-    echo "$repo_root/$current_branch" > .git/worktrees/"$current_branch"/gitdir
-    echo "ref: refs/heads/$current_branch" > .git/worktrees/"$current_branch"/HEAD
+    # Convert slashes to dashes for worktree metadata directory name
+    # (git encodes slashes when creating worktree metadata)
+    worktree_name=$(echo "$current_branch" | tr '/' '-')
+    mkdir -p .git/worktrees/"$worktree_name"
+    echo "gitdir: $repo_root/.git/worktrees/$worktree_name" > "$current_branch/.git"
+    echo "$repo_root/$current_branch" > .git/worktrees/"$worktree_name"/gitdir
+    echo "ref: refs/heads/$current_branch" > .git/worktrees/"$worktree_name"/HEAD
 
     # Copy common git files to worktree admin directory
-    touch .git/worktrees/"$current_branch"/commondir
-    echo "../.." > .git/worktrees/"$current_branch"/commondir
+    touch .git/worktrees/"$worktree_name"/commondir
+    echo "../.." > .git/worktrees/"$worktree_name"/commondir
 
     # Restore the index file to preserve staging area state
     if [ -f "$temp_index" ]; then
-      mv "$temp_index" .git/worktrees/"$current_branch"/index
+      mv "$temp_index" .git/worktrees/"$worktree_name"/index
     fi
 
     # Detect primary branch - check for main/master explicitly
@@ -602,6 +636,22 @@ case "$1" in
   setup)
     shift
 
+    # Parse flags
+    config_only=false
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --config-only)
+          config_only=true
+          shift
+          ;;
+        *)
+          echo "Unknown option: $1"
+          echo "Usage: git-wt setup [--config-only]"
+          exit 1
+          ;;
+      esac
+    done
+
     # Check for git (required)
     if ! command -v git &> /dev/null; then
       echo "Error: git is not installed"
@@ -609,10 +659,41 @@ case "$1" in
       exit 1
     fi
 
+    # If --config-only, just set up git config and exit
+    if [ "$config_only" = true ]; then
+      setup_git_config
+      echo ""
+      echo "Setup complete! The git alias 'git wt' is now configured."
+      exit 0
+    fi
+
     # Detect script location
     SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 
-    # Determine install location
+    # Detect if installed via Homebrew
+    is_homebrew=false
+    if echo "$SCRIPT_PATH" | grep -qE "(homebrew|Homebrew|Cellar|/usr/local/bin|/opt/homebrew)"; then
+      is_homebrew=true
+    fi
+
+    # If installed via Homebrew, just configure git
+    if [ "$is_homebrew" = true ]; then
+      echo "Detected Homebrew installation at: $SCRIPT_PATH"
+      echo ""
+      echo "git-wt is already installed via Homebrew - no file installation needed."
+      echo "Configuring git alias..."
+      echo ""
+      setup_git_config
+      echo ""
+      echo "Setup complete! Try it out:"
+      echo "  git wt clone <repo-url>"
+      echo ""
+      echo "Reorganize an existing repository with worktrees:"
+      echo "  git wt init"
+      exit 0
+    fi
+
+    # Determine install location for manual installation
     if [ -w /usr/local/bin ]; then
       INSTALL_DIR="/usr/local/bin"
     else
@@ -644,8 +725,11 @@ case "$1" in
     cp "$SCRIPT_PATH" "$INSTALL_DIR/git-wt"
     chmod +x "$INSTALL_DIR/git-wt"
 
+    echo "✓ git-wt installed to $INSTALL_DIR/git-wt"
+    echo ""
+
     # Set up git alias
-    git config --global alias.wt '!git-wt'
+    setup_git_config
 
     # Check for git-crypt (optional)
     echo ""
@@ -655,9 +739,6 @@ case "$1" in
       echo "Note: git-crypt not found (optional - only needed for encrypted repos)"
     fi
 
-    echo ""
-    echo "✓ git-wt installed to $INSTALL_DIR/git-wt"
-    echo "✓ Git alias configured: git config --global alias.wt '!git-wt'"
     echo ""
     echo "Setup complete! Try it out:"
     echo "  git wt clone <repo-url>"

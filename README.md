@@ -137,10 +137,10 @@ brew tap deanputney/tap
 brew install git-wt
 ```
 
-Then run the setup to configure the git alias:
+The git alias is configured automatically during installation. Verify it's working:
 
 ```bash
-git-wt setup
+git wt --help
 ```
 
 ### Manual Installation
@@ -155,11 +155,16 @@ chmod +x /usr/local/bin/git-wt
 
 2. Configure the git alias:
 ```bash
+git-wt setup --config-only
+```
+
+or
+
+```bash
 git config --global alias.wt '!git-wt'
 ```
 
 3. Verify installation:
-TODO: This needs to be set up.
 ```bash
 git wt --help
 ```

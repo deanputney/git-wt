@@ -15,13 +15,13 @@ class GitWt < Formula
   end
 
   def post_install
-    # Offer to set up the git alias
-    ohai "Setting up git alias"
-    system "git", "config", "--global", "alias.wt", "!git-wt"
+    # Configure git alias using the built-in setup command
+    ohai "Configuring git alias"
+    system bin/"git-wt", "setup", "--config-only"
   rescue
     opoo "Could not set git alias automatically"
     ohai "To use git-wt as 'git wt', run:"
-    puts "  git config --global alias.wt '!git-wt'"
+    puts "  git-wt setup --config-only"
   end
 
   def caveats
@@ -29,8 +29,8 @@ class GitWt < Formula
       git-wt has been installed!
 
       The git alias 'git wt' should be configured automatically.
-      If not, you can set it up manually:
-        git config --global alias.wt '!git-wt'
+      If not, you can set it up with:
+        git-wt setup --config-only
 
       Get started:
         git wt --help

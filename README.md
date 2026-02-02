@@ -12,10 +12,41 @@ git-wt aims to solve these problems:
 * Do you need to add your worktree to .gitignore?
 * Why are the `git worktree` commands long and unfamiliar in Unix terms? 
 
-git-wt allows you to create a new git alias `git wt` for working with worktrees. It's simple and has two major benefits:
+git-wt allows you to create a new git alias `git wt` for working with worktrees.
 
-1. The addition of `git wt clone` for checking out a bare repository with worktree subfolders.
-2. Cleaner, short aliases for standard worktree commands. Might as well clean this up too.
+## Quick Start!
+
+```
+brew install deanputney/tap/git-wt
+```
+
+Get the benefits right away by reorganizing an existing repository with `git wt init`:
+
+```
+Go from:                        To:                     
+.                               .                       
+├── .git                        ├── .git                <- Your git files are in a "bare" repo
+│   ├── config                  │   ├── config          
+│   ├── HEAD                    │   ├── HEAD            
+│   ├── # ... etc etc           │   ├── # ... etc etc   
+├── git-wt                      └── main                <- Create as many worktrees as you like
+├── LICENSE                         ├── .git            
+└── README.md                       ├── git-wt          
+                                    ├── LICENSE         
+                                    └── README.md                                                              
+```
+
+Then from your project directory create new worktrees as subdirectories with `git wt add <worktree_name>`.
+
+## Aliases
+
+These new aliases are added:
+
+```
+git wt ls (alias for list)
+git wt rm (alias for remove)
+git wt a (alias for add)
+```
 
 ## Clone
 
@@ -68,7 +99,7 @@ The `git` command will continue to behave as normal in each worktree. Simply cre
 
 The `git wt clone` approach puts all work inside a worktree, even `main`. It's clear where new worktrees should be created. In progress work is always contained.
 
-### Init
+## Init
 
 Already have a repository and want to convert it to the worktree structure? `git wt init` will reorganize your existing repository into the same clean structure that `git wt clone` creates.
 
@@ -106,16 +137,6 @@ After running `git wt init`:
 
 **Note**: `git wt init` will warn you if you have uncommitted changes or untracked files, and ask for confirmation before proceeding. All your work will be safely preserved in the worktree directory.
 
-## Aliases
-
-These new aliases are added:
-
-```
-git wt ls (alias for list)
-git wt rm (alias for remove)
-git wt a (alias for add)
-```
-
 ## Hooks
 
 git-wt supports custom hooks for advanced workflows. To install the built-in git-crypt hooks:
@@ -144,8 +165,6 @@ git wt --help
 ```
 
 ### Manual Installation
-
-If you prefer to install manually without the setup script:
 
 1. Copy the git-wt script to a directory in your PATH:
 ```bash

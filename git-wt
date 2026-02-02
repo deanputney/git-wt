@@ -1,5 +1,7 @@
 #!/bin/bash
 
+VERSION="0.0.2"
+
 # Helper function to find the common git directory where hooks are stored
 find_git_common_dir() {
   # In worktrees, --git-common-dir gives the shared .git directory
@@ -35,6 +37,8 @@ git-wt - An opinionated git alias for working with worktrees
 
 USAGE:
   git wt <command> [options]
+  git wt --version
+  git wt --help
 
 COMMANDS:
   clone <url> [folder]       Clone a repository with bare .git and worktree structure
@@ -771,6 +775,10 @@ case "$1" in
     # Install specified hook type
     hook_type="$1"
     install_hooks "$hook_type"
+    ;;
+
+  --version|-v|version)
+    echo "git-wt version $VERSION"
     ;;
 
   --help|-h|help)

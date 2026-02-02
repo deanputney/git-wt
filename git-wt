@@ -43,7 +43,13 @@ COMMANDS:
   remove <path>              Remove a worktree (alias: rm)
   list                       List all worktrees (alias: ls)
   install-hooks <type>       Install hook examples (e.g., git-crypt)
-  setup                      Install git-wt and configure git alias
+  setup [--config-only]      Install git-wt and configure git alias
+
+      Note: If you installed via Homebrew, you don't need to run this.
+            Homebrew installation already configures everything.
+
+      Options:
+        --config-only    Only configure git alias (skip installation)
 
 EXAMPLES:
   git wt clone https://github.com/user/repo
@@ -63,6 +69,12 @@ EXAMPLES:
 
   git wt list
     Show all worktrees in the repository
+
+  git wt setup
+    Install git-wt and configure git alias (for manual installation)
+
+  git wt setup --config-only
+    Only configure git alias (if git-wt is already installed)
 
 ALIASES:
   a   -> add

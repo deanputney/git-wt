@@ -28,6 +28,30 @@ run_hook() {
   return 0
 }
 
+# Helper function to set up git alias configuration
+setup_git_config() {
+  # Check if alias is already configured
+  if git config --global alias.wt >/dev/null 2>&1; then
+    local current_alias=$(git config --global alias.wt)
+    if [ "$current_alias" = "!git-wt" ]; then
+      echo "✓ Git alias already configured: git config --global alias.wt '!git-wt'"
+      return 0
+    else
+      echo "Warning: git alias 'wt' is already set to: $current_alias"
+      read -p "Do you want to overwrite it with '!git-wt'? (y/N) " -n 1 -r
+      echo
+      if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Skipped git alias configuration."
+        return 0
+      fi
+    fi
+  fi
+
+  # Set up git alias
+  git config --global alias.wt '!git-wt'
+  echo "✓ Git alias configured: git config --global alias.wt '!git-wt'"
+}
+
 init_new_repo() {
   echo "Initializing new git-wt repository..."
   echo ""
@@ -135,6 +159,64 @@ init_new_repo() {
 }
 
 case "$1" in
+  --help|-h|help)
+    cat <<'EOF'
+git-wt - Enhanced workflows for Git worktrees
+
+USAGE:
+  git-wt <command> [options]
+  git wt <command> [options]    (if git alias is configured)
+
+COMMANDS:
+  init, i
+      Convert existing repository to worktree structure, or initialize
+      a new git-wt repository from scratch
+
+  clone, cl <url> [folder]
+      Clone a repository with worktree structure
+
+  add, a <path> [branch]
+      Create a new worktree (supports pre/post-worktree-add hooks)
+
+  remove, rm <worktree>
+      Remove a worktree
+
+  list, ls
+      List all worktrees
+
+  setup [--config-only]
+      Install git-wt and configure git alias
+
+      Note: If you installed via Homebrew, you don't need to run this.
+            Homebrew installation already configures everything.
+
+      Options:
+        --config-only    Only configure git alias (skip installation)
+
+  --help, -h, help
+      Show this help message
+
+EXAMPLES:
+  # Clone a repository
+  git-wt clone https://github.com/user/repo.git
+
+  # Initialize existing repository
+  git-wt init
+
+  # Create a new worktree
+  git-wt add feature-branch
+
+  # List worktrees
+  git-wt list
+
+  # Setup (for manual installation only)
+  git-wt setup
+
+MORE INFO:
+  https://github.com/deanputney/git-wt
+EOF
+    ;;
+
   a|add)
     shift
 
@@ -449,6 +531,22 @@ case "$1" in
   setup)
     shift
 
+    # Parse flags
+    config_only=false
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --config-only)
+          config_only=true
+          shift
+          ;;
+        *)
+          echo "Unknown option: $1"
+          echo "Usage: git-wt setup [--config-only]"
+          exit 1
+          ;;
+      esac
+    done
+
     # Check for git (required)
     if ! command -v git &> /dev/null; then
       echo "Error: git is not installed"
@@ -456,10 +554,41 @@ case "$1" in
       exit 1
     fi
 
+    # If --config-only, just set up git config and exit
+    if [ "$config_only" = true ]; then
+      setup_git_config
+      echo ""
+      echo "Setup complete! The git alias 'git wt' is now configured."
+      exit 0
+    fi
+
     # Detect script location
     SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 
-    # Determine install location
+    # Detect if installed via Homebrew
+    is_homebrew=false
+    if echo "$SCRIPT_PATH" | grep -qE "(homebrew|Homebrew|Cellar|/usr/local/bin|/opt/homebrew)"; then
+      is_homebrew=true
+    fi
+
+    # If installed via Homebrew, just configure git
+    if [ "$is_homebrew" = true ]; then
+      echo "Detected Homebrew installation at: $SCRIPT_PATH"
+      echo ""
+      echo "git-wt is already installed via Homebrew - no file installation needed."
+      echo "Configuring git alias..."
+      echo ""
+      setup_git_config
+      echo ""
+      echo "Setup complete! Try it out:"
+      echo "  git wt clone <repo-url>"
+      echo ""
+      echo "Reorganize an existing repository with worktrees:"
+      echo "  git wt init"
+      exit 0
+    fi
+
+    # Determine install location for manual installation
     if [ -w /usr/local/bin ]; then
       INSTALL_DIR="/usr/local/bin"
     else
@@ -477,7 +606,24 @@ case "$1" in
     fi
 
     # Check if git-wt already exists at install location
-    if [ -f "$INSTALL_DIR/git-wt" ] && [ "$SCRIPT_PATH" != "$INSTALL_DIR/git-wt" ]; then
+    if [ -f "$INSTALL_DIR/git-wt" ]; then
+      # Check if it's the same file (already in place)
+      if [ "$SCRIPT_PATH" = "$INSTALL_DIR/git-wt" ]; then
+        echo "git-wt is already installed at $INSTALL_DIR/git-wt"
+        echo ""
+        echo "Configuring git alias..."
+        echo ""
+        setup_git_config
+        echo ""
+        echo "Setup complete! Try it out:"
+        echo "  git wt clone <repo-url>"
+        echo ""
+        echo "Reorganize an existing repository with worktrees:"
+        echo "  git wt init"
+        exit 0
+      fi
+
+      # Different file exists, ask to overwrite
       echo "git-wt is already installed at $INSTALL_DIR/git-wt"
       read -p "Do you want to overwrite it? (y/N) " -n 1 -r
       echo
@@ -491,8 +637,11 @@ case "$1" in
     cp "$SCRIPT_PATH" "$INSTALL_DIR/git-wt"
     chmod +x "$INSTALL_DIR/git-wt"
 
+    echo "✓ git-wt installed to $INSTALL_DIR/git-wt"
+    echo ""
+
     # Set up git alias
-    git config --global alias.wt '!git-wt'
+    setup_git_config
 
     # Check for git-crypt (optional)
     echo ""
@@ -502,9 +651,6 @@ case "$1" in
       echo "Note: git-crypt not found (optional - only needed for encrypted repos)"
     fi
 
-    echo ""
-    echo "✓ git-wt installed to $INSTALL_DIR/git-wt"
-    echo "✓ Git alias configured: git config --global alias.wt '!git-wt'"
     echo ""
     echo "Setup complete! Try it out:"
     echo "  git wt clone <repo-url>"

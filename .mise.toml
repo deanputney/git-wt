@@ -64,6 +64,15 @@ rm -f git-wt.bak
 echo "Updated VERSION to $NEW_VERSION"
 echo ""
 
+# Commit the version change
+echo "Committing version bump..."
+git add git-wt
+git commit -m "Bump version to $NEW_VERSION"
+
+# Push the commit
+echo "Pushing version bump commit..."
+git push origin HEAD
+
 # Get last tag for changelog
 LAST_TAG=$(git tag -l --sort=-v:refname | head -1)
 

@@ -29,7 +29,7 @@ Go from:                        To:
 │   ├── config                  │   ├── config          
 │   ├── HEAD                    │   ├── HEAD            
 │   ├── # ... etc etc           │   ├── # ... etc etc   
-├── git-wt                      └── main                <- Create as many worktrees as you like
+├── git-wt                      └── main                <- Worktrees are neatly organized here
 ├── LICENSE                         ├── .git            
 └── README.md                       ├── git-wt          
                                     ├── LICENSE         

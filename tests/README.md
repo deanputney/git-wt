@@ -9,6 +9,7 @@ Integration tests for git-wt using BATS (Bash Automated Testing System).
 ```
 tests/
 ├── init.bats                    # Tests for git wt init command
+├── hooks.bats                   # Tests for git wt hook system
 ├── test_helper/
 │   ├── bats-support/           # BATS support library (submodule)
 │   ├── bats-assert/            # BATS assertion library (submodule)
@@ -16,7 +17,15 @@ tests/
 └── fixtures/                   # Test data (if needed)
 ```
 
-## Test Categories
+## Test Files
+
+### init.bats
+Tests for the `git wt init` command - converting existing repos and creating new ones.
+
+### hooks.bats
+Tests for the hook system - pre-worktree-add and post-worktree-add hooks.
+
+## Test Categories (init.bats)
 
 ### A. Pre-flight Validation Tests (6 tests)
 Tests that verify the init command correctly rejects invalid repository states:
@@ -64,6 +73,42 @@ Tests for special scenarios and corner cases:
 - .gitattributes preservation
 - Symbolic links
 
+## Test Categories (hooks.bats)
+
+### A. Pre-worktree-add Hook Tests (4 tests)
+Tests for the pre-worktree-add hook functionality:
+- Hook execution before worktree creation
+- Correct argument passing
+- Ability to abort worktree creation
+- Exit code reporting
+
+### B. Post-worktree-add Hook Tests (3 tests)
+Tests for the post-worktree-add hook functionality:
+- Hook execution after worktree creation
+- Worktree path as first argument
+- Failure reporting (worktree still exists)
+
+### C. Both Hooks Together (2 tests)
+Tests for combined hook behavior:
+- Correct execution order (pre then post)
+- Post hook skipped if pre hook fails
+
+### D. Backward Compatibility Tests (3 tests)
+Tests ensuring git-wt works without hooks:
+- No hooks directory
+- Empty hooks directory
+- Non-executable hook files
+
+### E. Hook Location Tests (1 test)
+Tests for hook discovery in worktree environments:
+- Hooks work from common git directory
+
+### F. git-crypt Example Hook Tests (3 tests)
+Tests for the provided git-crypt hook examples:
+- Pre-hook syntax validation
+- Post-hook syntax validation
+- Clean exit when git-crypt not configured
+
 ## Helper Functions
 
 All helper functions are defined in `test_helper/test_helpers.bash`.
@@ -101,6 +146,12 @@ All helper functions are defined in `test_helper/test_helpers.bash`.
 ```bash
 cd /path/to/git-wt
 bats tests/init.bats
+bats tests/hooks.bats
+```
+
+### Run All Tests at Once
+```bash
+bats tests/*.bats
 ```
 
 ### Run Specific Test

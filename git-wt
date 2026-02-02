@@ -1,5 +1,33 @@
 #!/bin/bash
 
+# Helper function to find the common git directory where hooks are stored
+find_git_common_dir() {
+  # In worktrees, --git-common-dir gives the shared .git directory
+  # In normal repos, it returns the same as --git-dir
+  local git_common_dir=$(git rev-parse --git-common-dir 2>/dev/null)
+  echo "$git_common_dir"
+}
+
+# Helper function to run a hook if it exists
+run_hook() {
+  local hook_name="$1"
+  shift
+  local git_common_dir=$(find_git_common_dir)
+
+  if [ -z "$git_common_dir" ]; then
+    return 0
+  fi
+
+  local hook_path="$git_common_dir/hooks/$hook_name"
+
+  if [ -x "$hook_path" ]; then
+    "$hook_path" "$@"
+    return $?
+  fi
+
+  return 0
+}
+
 init_new_repo() {
   echo "Initializing new git-wt repository..."
   echo ""
@@ -109,31 +137,37 @@ init_new_repo() {
 case "$1" in
   a|add)
     shift
-    # Save the current filter.git-crypt.required setting
-    required_setting=$(git config filter.git-crypt.required 2>/dev/null || echo "")
 
-    # Temporarily disable git-crypt by removing the required flag
-    git config --unset filter.git-crypt.required || true
+    # Run pre-worktree-add hook with the arguments that will be passed to git worktree add
+    run_hook "pre-worktree-add" "$@"
+    hook_status=$?
 
-    # Create the worktree without checking out files
-    worktree_path="$1"
-    git worktree add --no-checkout "$@"
-
-    # Restore the required setting if it existed
-    if [ -n "$required_setting" ]; then
-      git config filter.git-crypt.required "$required_setting"
+    if [ $hook_status -ne 0 ]; then
+      echo "git-wt: pre-worktree-add hook failed with exit code $hook_status" >&2
+      exit $hook_status
     fi
 
-    # In the worktree, disable filters temporarily and checkout
-    git -C "$worktree_path" config filter.git-crypt.smudge "cat"
-    git -C "$worktree_path" config filter.git-crypt.clean "cat"
-    git -C "$worktree_path" reset --hard HEAD
+    # Extract the worktree path (first argument)
+    worktree_path="$1"
 
-    # Re-enable filters, unlock, and re-checkout to decrypt
-    git -C "$worktree_path" config --unset filter.git-crypt.smudge
-    git -C "$worktree_path" config --unset filter.git-crypt.clean
-    git -C "$worktree_path" crypt unlock
-    git -C "$worktree_path" reset --hard HEAD
+    # Create the worktree
+    git worktree add "$@"
+    add_status=$?
+
+    if [ $add_status -ne 0 ]; then
+      echo "git-wt: git worktree add failed with exit code $add_status" >&2
+      exit $add_status
+    fi
+
+    # Run post-worktree-add hook with the worktree path and all original arguments
+    run_hook "post-worktree-add" "$worktree_path" "$@"
+    hook_status=$?
+
+    if [ $hook_status -ne 0 ]; then
+      echo "git-wt: post-worktree-add hook failed with exit code $hook_status" >&2
+      echo "git-wt: worktree was created but post-processing failed" >&2
+      exit $hook_status
+    fi
     ;;
 
   rm|remove)
@@ -410,6 +444,73 @@ case "$1" in
     fi
     echo "Worktree list:"
     git worktree list
+    ;;
+
+  setup)
+    shift
+
+    # Check for git (required)
+    if ! command -v git &> /dev/null; then
+      echo "Error: git is not installed"
+      echo "Please install git first: https://git-scm.com/downloads"
+      exit 1
+    fi
+
+    # Detect script location
+    SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+
+    # Determine install location
+    if [ -w /usr/local/bin ]; then
+      INSTALL_DIR="/usr/local/bin"
+    else
+      INSTALL_DIR="$HOME/bin"
+      mkdir -p "$INSTALL_DIR"
+
+      # Check if ~/bin is in PATH, warn if not
+      if [[ ":$PATH:" != *":$HOME/bin:"* ]]; then
+        echo ""
+        echo "Note: $HOME/bin is not in your PATH"
+        echo "Add this to your ~/.bashrc or ~/.zshrc:"
+        echo '  export PATH="$HOME/bin:$PATH"'
+        echo ""
+      fi
+    fi
+
+    # Check if git-wt already exists at install location
+    if [ -f "$INSTALL_DIR/git-wt" ] && [ "$SCRIPT_PATH" != "$INSTALL_DIR/git-wt" ]; then
+      echo "git-wt is already installed at $INSTALL_DIR/git-wt"
+      read -p "Do you want to overwrite it? (y/N) " -n 1 -r
+      echo
+      if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Setup cancelled."
+        exit 0
+      fi
+    fi
+
+    # Copy script
+    cp "$SCRIPT_PATH" "$INSTALL_DIR/git-wt"
+    chmod +x "$INSTALL_DIR/git-wt"
+
+    # Set up git alias
+    git config --global alias.wt '!git-wt'
+
+    # Check for git-crypt (optional)
+    echo ""
+    if command -v git-crypt &> /dev/null; then
+      echo "✓ git-crypt found (optional git-crypt features will work)"
+    else
+      echo "Note: git-crypt not found (optional - only needed for encrypted repos)"
+    fi
+
+    echo ""
+    echo "✓ git-wt installed to $INSTALL_DIR/git-wt"
+    echo "✓ Git alias configured: git config --global alias.wt '!git-wt'"
+    echo ""
+    echo "Setup complete! Try it out:"
+    echo "  git wt clone <repo-url>"
+    echo ""
+    echo "Reorganize an existing repository with worktrees:"
+    echo "  git wt init"
     ;;
 
   *)

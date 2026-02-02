@@ -21,7 +21,7 @@ git-wt allows you to create a new git alias `git wt` for working with worktrees.
 
 `git wt` adds an opinionated `clone` feature for organizing a new repository with worktrees. `git wt clone` creates an empty directory for your repository, checks out the `.git` directory inside it, and **leaves the rest of your directory as clean empty space for your worktree directories**.
 
-Compare these two checkouts.
+Compare these two checkouts:
 
 The standard clone for a new repository:
 
@@ -115,6 +115,45 @@ git wt ls (alias for list)
 git wt rm (alias for remove)
 git wt a (alias for add)
 ```
+
+## Installation
+
+### Homebrew Installation
+
+If you use Homebrew, you can install via a tap:
+
+```bash
+brew tap deanputney/tap
+brew install git-wt
+```
+
+Then run the setup to configure the git alias:
+
+```bash
+git-wt setup
+```
+
+### Manual Installation
+
+If you prefer to install manually without the setup script:
+
+1. Copy the git-wt script to a directory in your PATH:
+```bash
+cp git-wt /usr/local/bin/git-wt
+chmod +x /usr/local/bin/git-wt
+```
+
+2. Configure the git alias:
+```bash
+git config --global alias.wt '!git-wt'
+```
+
+3. Verify installation:
+TODO: This needs to be set up.
+```bash
+git wt --help
+```
+
 
 ## Development
 

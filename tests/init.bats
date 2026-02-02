@@ -10,7 +10,7 @@ setup() {
   TEST_TEMP_DIR="$(mktemp -d)"
   cd "$TEST_TEMP_DIR"
 
-  # Configure git via environment variables (doesn't affect global config)
+  # Configure git via environment variables (doesn't touch global config)
   export GIT_AUTHOR_NAME="Test User"
   export GIT_AUTHOR_EMAIL="test@example.com"
   export GIT_COMMITTER_NAME="Test User"

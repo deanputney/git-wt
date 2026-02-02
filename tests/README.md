@@ -57,9 +57,16 @@ Tests verifying that all repository state is preserved during conversion:
 - Git configuration
 - Large number of files
 
-### D. Edge Cases (6 tests)
+### D. Edge Cases (12 tests)
 Tests for special scenarios and corner cases:
-- Branch names with slashes (feature/test-123)
+- **Branch names with slashes** (7 tests):
+  - Basic slash branch conversion (feature/test-123)
+  - Slash branches with existing main and uncommitted files
+  - Deeply nested branch names (team/frontend/feature/new-ui)
+  - Preserving uncommitted changes in slash branches
+  - Creating main alongside slash branch worktrees
+  - User namespace pattern (alice/new-dashboard)
+  - Common patterns like release/v1.2.3
 - Long branch names
 - Running from subdirectory
 - Multiple remotes

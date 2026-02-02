@@ -355,3 +355,157 @@ EOF
   assert_success
   [[ -d "feature" ]]
 }
+
+################################################################################
+# G. install-hooks Command Tests
+################################################################################
+
+@test "install-hooks with no arguments shows available hooks" {
+  # Run
+  run bash "$GIT_WT_SCRIPT" install-hooks
+
+  # Assert
+  assert_success
+  assert_output --partial "Available hooks for installation"
+  assert_output --partial "hello-world"
+  assert_output --partial "git-crypt"
+  assert_output --partial "Usage:"
+}
+
+@test "install-hooks git-crypt successfully installs hooks" {
+  # Run - auto-confirm with 'y' for overwrite if exists
+  run bash -c "echo 'y' | bash '$GIT_WT_SCRIPT' install-hooks git-crypt"
+
+  # Assert
+  assert_success
+  assert_output --partial "Successfully installed git-crypt hooks"
+
+  # Verify hooks exist
+  [[ -f ".git/hooks/pre-worktree-add" ]]
+  [[ -f ".git/hooks/post-worktree-add" ]]
+}
+
+@test "install-hooks hello-world successfully installs hooks" {
+  # Run - auto-confirm with 'y' for overwrite if exists
+  run bash -c "echo 'y' | bash '$GIT_WT_SCRIPT' install-hooks hello-world"
+
+  # Assert
+  assert_success
+  assert_output --partial "Successfully installed hello-world hooks"
+
+  # Verify hooks exist
+  [[ -f ".git/hooks/pre-worktree-add" ]]
+  [[ -f ".git/hooks/post-worktree-add" ]]
+}
+
+@test "installed hooks are executable" {
+  # Setup: Install hooks
+  bash -c "echo 'y' | bash '$GIT_WT_SCRIPT' install-hooks hello-world" >/dev/null 2>&1
+
+  # Assert - hooks should be executable
+  [[ -x ".git/hooks/pre-worktree-add" ]]
+  [[ -x ".git/hooks/post-worktree-add" ]]
+}
+
+@test "installed hello-world hooks work correctly" {
+  # Setup: Install hello-world hooks
+  bash -c "echo 'y' | bash '$GIT_WT_SCRIPT' install-hooks hello-world" >/dev/null 2>&1
+
+  # Run
+  run bash "$GIT_WT_SCRIPT" add test-hello
+
+  # Assert
+  assert_success
+  assert_output --partial "Hello from pre-worktree-add hook"
+  assert_output --partial "Hello from post-worktree-add hook"
+  assert_output --partial "Successfully created worktree at: test-hello"
+  [[ -d "test-hello" ]]
+}
+
+@test "install-hooks fails when not in git repository" {
+  # Setup: Move to non-git directory
+  cd /tmp
+
+  # Run
+  run bash "$GIT_WT_SCRIPT" install-hooks git-crypt
+
+  # Assert
+  assert_failure
+  assert_output --partial "Error: Not in a git repository"
+}
+
+@test "install-hooks fails with unknown hook type" {
+  # Run
+  run bash "$GIT_WT_SCRIPT" install-hooks unknown-hook-type
+
+  # Assert
+  assert_failure
+  assert_output --partial "Error: Unknown hook type"
+  assert_output --partial "git wt install-hooks"
+}
+
+@test "install-hooks prompts before overwriting existing hooks" {
+  # Setup: Create existing hooks
+  mkdir -p .git/hooks
+  echo "#!/bin/bash" > .git/hooks/pre-worktree-add
+  echo "#!/bin/bash" > .git/hooks/post-worktree-add
+  chmod +x .git/hooks/pre-worktree-add .git/hooks/post-worktree-add
+
+  # Run - decline overwrite
+  run bash -c "echo 'n' | bash '$GIT_WT_SCRIPT' install-hooks git-crypt"
+
+  # Assert
+  assert_success
+  assert_output --partial "Warning: Hooks already exist"
+  assert_output --partial "Installation cancelled"
+}
+
+@test "install-hooks overwrites existing hooks when confirmed" {
+  # Setup: Create existing hooks with different content
+  mkdir -p .git/hooks
+  echo "#!/bin/bash" > .git/hooks/pre-worktree-add
+  echo "echo 'OLD HOOK'" >> .git/hooks/pre-worktree-add
+  chmod +x .git/hooks/pre-worktree-add
+
+  # Run - confirm overwrite
+  run bash -c "echo 'y' | bash '$GIT_WT_SCRIPT' install-hooks hello-world"
+
+  # Assert
+  assert_success
+  assert_output --partial "Successfully installed hello-world hooks"
+
+  # Verify new content (should not contain 'OLD HOOK')
+  local content=$(cat .git/hooks/pre-worktree-add)
+  [[ "$content" != *"OLD HOOK"* ]]
+  [[ "$content" == *"hello-world"* ]]
+}
+
+@test "install-hooks works from within a worktree" {
+  # Setup: Create a worktree and cd into it
+  bash "$GIT_WT_SCRIPT" add feature1 >/dev/null 2>&1
+  cd feature1
+
+  # Run
+  run bash -c "echo 'y' | bash '$GIT_WT_SCRIPT' install-hooks hello-world"
+
+  # Assert
+  assert_success
+  assert_output --partial "Successfully installed hello-world hooks"
+
+  # Verify hooks are in common git directory, not worktree
+  local git_common_dir=$(git rev-parse --git-common-dir)
+  [[ -f "$git_common_dir/hooks/pre-worktree-add" ]]
+  [[ -f "$git_common_dir/hooks/post-worktree-add" ]]
+}
+
+@test "hello-world hook example is valid bash" {
+  # Get the directory containing git-wt script
+  local script_dir=$(dirname "$GIT_WT_SCRIPT")
+
+  # Run syntax check on examples
+  run bash -n "$script_dir/examples/hooks/hello-world-pre-worktree-add"
+  assert_success
+
+  run bash -n "$script_dir/examples/hooks/hello-world-post-worktree-add"
+  assert_success
+}

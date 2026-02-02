@@ -45,15 +45,25 @@ Ready-to-use hook examples are provided in `examples/hooks/` that implement the 
 From your repository root:
 
 ```bash
-# Copy the hook examples to your hooks directory
+git wt install-hooks git-crypt
+```
+
+That's it! The command will:
+- Copy the git-crypt hooks to `.git/hooks/`
+- Set executable permissions automatically
+- Work correctly even from within a worktree
+
+#### Manual Installation (Alternative)
+
+If you prefer to install manually:
+
+```bash
 cp examples/hooks/git-crypt-pre-worktree-add .git/hooks/pre-worktree-add
 cp examples/hooks/git-crypt-post-worktree-add .git/hooks/post-worktree-add
-
-# Make them executable
 chmod +x .git/hooks/pre-worktree-add .git/hooks/post-worktree-add
 ```
 
-That's it! The hooks will now handle git-crypt automatically when you run `git-wt add`.
+The hooks will now handle git-crypt automatically when you run `git-wt add`.
 
 ### How It Works
 
@@ -79,6 +89,36 @@ cd test-branch
 git crypt status
 # Should show files as decrypted
 ```
+
+## Hello World Example Hooks
+
+For learning and testing, git-wt includes simple "hello-world" example hooks:
+
+```bash
+git wt install-hooks hello-world
+```
+
+These hooks simply print messages when you create a worktree:
+
+```bash
+git wt add test-branch
+
+# Output:
+# 👋 Hello from pre-worktree-add hook!
+#    About to create worktree with arguments: test-branch
+# Preparing worktree (new branch 'test-branch')
+# ✨ Hello from post-worktree-add hook!
+#    Successfully created worktree at: test-branch
+#    All arguments: test-branch test-branch
+```
+
+The hello-world hooks are useful for:
+- Understanding when and how hooks are called
+- Testing that your hook installation is working
+- Learning the hook argument structure before creating custom hooks
+- Verifying hook execution without side effects
+
+Source code: `examples/hooks/hello-world-*`
 
 ## Creating Custom Hooks
 

@@ -28,6 +28,181 @@ run_hook() {
   return 0
 }
 
+# Helper function to show help
+show_help() {
+  cat << 'EOF'
+git-wt - An opinionated git alias for working with worktrees
+
+USAGE:
+  git wt <command> [options]
+
+COMMANDS:
+  clone <url> [folder]       Clone a repository with bare .git and worktree structure
+  init                       Convert existing repo to worktree structure
+  add <path> [branch]        Create a new worktree (alias: a)
+  remove <path>              Remove a worktree (alias: rm)
+  list                       List all worktrees (alias: ls)
+  install-hooks <type>       Install hook examples (e.g., git-crypt)
+  setup [--config-only]      Install git-wt and configure git alias
+
+      Note: If you installed via Homebrew, you don't need to run this.
+            Homebrew installation already configures everything.
+
+      Options:
+        --config-only    Only configure git alias (skip installation)
+
+EXAMPLES:
+  git wt clone https://github.com/user/repo
+    Clone a repository with clean worktree structure
+
+  git wt init
+    Convert your existing repository to use worktrees
+
+  git wt add feature-branch
+    Create a new worktree for 'feature-branch'
+
+  git wt install-hooks hello-world
+    Install example hooks to see how the hook system works
+
+  git wt install-hooks git-crypt
+    Install git-crypt hooks for encrypted repositories
+
+  git wt list
+    Show all worktrees in the repository
+
+  git wt setup
+    Install git-wt and configure git alias (for manual installation)
+
+  git wt setup --config-only
+    Only configure git alias (if git-wt is already installed)
+
+ALIASES:
+  a   -> add
+  rm  -> remove
+  ls  -> list
+  cl  -> clone
+  i   -> init
+
+MORE INFORMATION:
+  Documentation: https://github.com/deanputney/git-wt
+  Hooks: See HOOKS.md for custom hook documentation
+
+EOF
+
+  # Interactive prompt to show git worktree help
+  echo ""
+  read -p "Press Enter to view 'git worktree --help' or Ctrl+C to exit... " -r
+  echo ""
+  git worktree --help
+}
+
+# Helper function to show available hooks
+show_available_hooks() {
+  echo "Available hooks for installation:"
+  echo ""
+  echo "  hello-world"
+  echo "    Simple example hooks that print messages (learning/testing)"
+  echo "    Files: pre-worktree-add, post-worktree-add"
+  echo ""
+  echo "  git-crypt"
+  echo "    Handles encrypted files in worktrees (git-crypt integration)"
+  echo "    Files: pre-worktree-add, post-worktree-add"
+  echo ""
+  echo "Usage:"
+  echo "  git wt install-hooks <hook-type>"
+  echo ""
+  echo "Examples:"
+  echo "  git wt install-hooks hello-world"
+  echo "  git wt install-hooks git-crypt"
+}
+
+# Helper function to install hooks
+install_hooks() {
+  local hook_type="$1"
+
+  # Validate we're in a git repository
+  local git_common_dir=$(git rev-parse --git-common-dir 2>/dev/null)
+  if [ -z "$git_common_dir" ]; then
+    echo "Error: Not in a git repository. Run this command from inside your repository." >&2
+    exit 1
+  fi
+
+  local hooks_dir="$git_common_dir/hooks"
+
+  # Find script directory to locate example hooks
+  local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  local examples_dir="$script_dir/examples/hooks"
+
+  # Validate hook type and get hook file paths
+  local pre_hook=""
+  local post_hook=""
+
+  case "$hook_type" in
+    hello-world)
+      pre_hook="$examples_dir/hello-world-pre-worktree-add"
+      post_hook="$examples_dir/hello-world-post-worktree-add"
+      ;;
+    git-crypt)
+      pre_hook="$examples_dir/git-crypt-pre-worktree-add"
+      post_hook="$examples_dir/git-crypt-post-worktree-add"
+      ;;
+    *)
+      echo "Error: Unknown hook type '$hook_type'" >&2
+      echo "Run 'git wt install-hooks' to see available hooks." >&2
+      exit 1
+      ;;
+  esac
+
+  # Validate example hooks exist
+  if [ ! -f "$pre_hook" ] || [ ! -f "$post_hook" ]; then
+    echo "Error: Hook examples not found at $examples_dir" >&2
+    echo "Ensure git-wt is properly installed with example hooks." >&2
+    exit 1
+  fi
+
+  # Create hooks directory if it doesn't exist
+  mkdir -p "$hooks_dir"
+
+  # Check for existing hooks
+  local target_pre="$hooks_dir/pre-worktree-add"
+  local target_post="$hooks_dir/post-worktree-add"
+
+  if [ -f "$target_pre" ] || [ -f "$target_post" ]; then
+    echo "Warning: Hooks already exist:"
+    [ -f "$target_pre" ] && echo "  $target_pre"
+    [ -f "$target_post" ] && echo "  $target_post"
+    echo ""
+    read -p "Overwrite existing hooks? (y/N) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+      echo "Installation cancelled."
+      exit 0
+    fi
+  fi
+
+  # Copy and chmod hooks
+  if ! cp "$pre_hook" "$target_pre"; then
+    echo "Error: Failed to copy pre-worktree-add hook. Check permissions for $hooks_dir" >&2
+    exit 1
+  fi
+
+  if ! cp "$post_hook" "$target_post"; then
+    echo "Error: Failed to copy post-worktree-add hook. Check permissions for $hooks_dir" >&2
+    exit 1
+  fi
+
+  chmod +x "$target_pre" "$target_post"
+
+  # Success message
+  echo "Successfully installed $hook_type hooks!"
+  echo ""
+  echo "Installed to:"
+  echo "  $target_pre"
+  echo "  $target_post"
+  echo ""
+  echo "The hooks will now run automatically when you use 'git wt add'."
+}
+
 # Helper function to set up git alias configuration
 setup_git_config() {
   # Check if alias is already configured
@@ -159,64 +334,6 @@ init_new_repo() {
 }
 
 case "$1" in
-  --help|-h|help)
-    cat <<'EOF'
-git-wt - Enhanced workflows for Git worktrees
-
-USAGE:
-  git-wt <command> [options]
-  git wt <command> [options]    (if git alias is configured)
-
-COMMANDS:
-  init, i
-      Convert existing repository to worktree structure, or initialize
-      a new git-wt repository from scratch
-
-  clone, cl <url> [folder]
-      Clone a repository with worktree structure
-
-  add, a <path> [branch]
-      Create a new worktree (supports pre/post-worktree-add hooks)
-
-  remove, rm <worktree>
-      Remove a worktree
-
-  list, ls
-      List all worktrees
-
-  setup [--config-only]
-      Install git-wt and configure git alias
-
-      Note: If you installed via Homebrew, you don't need to run this.
-            Homebrew installation already configures everything.
-
-      Options:
-        --config-only    Only configure git alias (skip installation)
-
-  --help, -h, help
-      Show this help message
-
-EXAMPLES:
-  # Clone a repository
-  git-wt clone https://github.com/user/repo.git
-
-  # Initialize existing repository
-  git-wt init
-
-  # Create a new worktree
-  git-wt add feature-branch
-
-  # List worktrees
-  git-wt list
-
-  # Setup (for manual installation only)
-  git-wt setup
-
-MORE INFO:
-  https://github.com/deanputney/git-wt
-EOF
-    ;;
-
   a|add)
     shift
 
@@ -606,24 +723,7 @@ EOF
     fi
 
     # Check if git-wt already exists at install location
-    if [ -f "$INSTALL_DIR/git-wt" ]; then
-      # Check if it's the same file (already in place)
-      if [ "$SCRIPT_PATH" = "$INSTALL_DIR/git-wt" ]; then
-        echo "git-wt is already installed at $INSTALL_DIR/git-wt"
-        echo ""
-        echo "Configuring git alias..."
-        echo ""
-        setup_git_config
-        echo ""
-        echo "Setup complete! Try it out:"
-        echo "  git wt clone <repo-url>"
-        echo ""
-        echo "Reorganize an existing repository with worktrees:"
-        echo "  git wt init"
-        exit 0
-      fi
-
-      # Different file exists, ask to overwrite
+    if [ -f "$INSTALL_DIR/git-wt" ] && [ "$SCRIPT_PATH" != "$INSTALL_DIR/git-wt" ]; then
       echo "git-wt is already installed at $INSTALL_DIR/git-wt"
       read -p "Do you want to overwrite it? (y/N) " -n 1 -r
       echo
@@ -657,6 +757,24 @@ EOF
     echo ""
     echo "Reorganize an existing repository with worktrees:"
     echo "  git wt init"
+    ;;
+
+  install-hooks)
+    shift
+
+    # No arguments - show available hooks
+    if [ $# -eq 0 ]; then
+      show_available_hooks
+      exit 0
+    fi
+
+    # Install specified hook type
+    hook_type="$1"
+    install_hooks "$hook_type"
+    ;;
+
+  --help|-h|help)
+    show_help
     ;;
 
   *)

@@ -1,0 +1,20 @@
+#!/bin/bash
+#
+# hello-world pre-worktree-add hook
+#
+# This is a simple example hook that demonstrates the pre-worktree-add hook.
+# Install this to .git/hooks/pre-worktree-add to see it in action.
+#
+# INSTALLATION:
+#   git wt install-hooks hello-world
+#
+# Or manually:
+#   cp examples/hooks/hello-world-pre-worktree-add .git/hooks/pre-worktree-add
+#   cp examples/hooks/hello-world-post-worktree-add .git/hooks/post-worktree-add
+#   chmod +x .git/hooks/pre-worktree-add .git/hooks/post-worktree-add
+
+echo "👋 Hello from pre-worktree-add hook!"
+echo "   About to create worktree with arguments: $*"
+
+# Exit 0 to allow the worktree creation to proceed
+exit 0

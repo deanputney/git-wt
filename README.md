@@ -116,6 +116,16 @@ git wt rm (alias for remove)
 git wt a (alias for add)
 ```
 
+## Hooks
+
+git-wt supports custom hooks for advanced workflows. To install the built-in git-crypt hooks:
+
+```bash
+git wt install-hooks git-crypt
+```
+
+See [HOOKS.md](HOOKS.md) for more information about creating custom hooks and troubleshooting git-crypt integration.
+
 ## Installation
 
 ### Homebrew Installation

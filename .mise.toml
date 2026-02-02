@@ -1,0 +1,138 @@
+[tasks.release]
+description = "Create and push a new release (usage: mise run release [version])"
+run = '''
+#!/bin/bash
+set -e
+
+# Get version argument or auto-bump
+NEW_VERSION="$1"
+
+if [ -z "$NEW_VERSION" ]; then
+  # Get last tag version
+  LAST_TAG=$(git tag -l --sort=-v:refname | head -1)
+
+  if [ -z "$LAST_TAG" ]; then
+    echo "Error: No existing tags found. Please specify a version."
+    echo "Usage: mise run release <version>"
+    exit 1
+  fi
+
+  # Strip 'v' prefix if present
+  LAST_VERSION="${LAST_TAG#v}"
+
+  # Parse version and bump patch
+  if [[ $LAST_VERSION =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+    MAJOR="${BASH_REMATCH[1]}"
+    MINOR="${BASH_REMATCH[2]}"
+    PATCH="${BASH_REMATCH[3]}"
+    NEW_PATCH=$((PATCH + 1))
+    NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
+    echo "Auto-bumping from $LAST_VERSION to $NEW_VERSION"
+  else
+    echo "Error: Could not parse last version: $LAST_VERSION"
+    exit 1
+  fi
+else
+  # Strip 'v' prefix if user provided it
+  NEW_VERSION="${NEW_VERSION#v}"
+
+  # Validate version format
+  if ! [[ $NEW_VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "Error: Version must be in format X.Y.Z (e.g., 0.0.3)"
+    exit 1
+  fi
+fi
+
+TAG="v$NEW_VERSION"
+
+# Check if tag already exists
+if git rev-parse "$TAG" >/dev/null 2>&1; then
+  echo "Error: Tag $TAG already exists"
+  exit 1
+fi
+
+echo ""
+echo "Preparing release $TAG"
+echo ""
+
+# Update VERSION in git-wt script
+echo "Updating VERSION in git-wt script..."
+sed -i.bak "s/^VERSION=.*/VERSION=\"$NEW_VERSION\"/" git-wt
+rm -f git-wt.bak
+
+# Show the change
+echo "Updated VERSION to $NEW_VERSION"
+echo ""
+
+# Get last tag for changelog
+LAST_TAG=$(git tag -l --sort=-v:refname | head -1)
+
+if [ -z "$LAST_TAG" ]; then
+  echo "Error: No previous release found for changelog"
+  exit 1
+fi
+
+echo "Creating release notes from $LAST_TAG to $TAG..."
+echo ""
+
+# Create git tag
+git tag -a "$TAG" -m "Release version $NEW_VERSION"
+echo "Created tag $TAG"
+
+# Push tag
+echo "Pushing tag to remote..."
+git push origin "$TAG"
+
+# Create GitHub release
+echo ""
+echo "Creating GitHub release..."
+
+gh release create "$TAG" \
+  --title "$TAG" \
+  --notes "## What's Changed
+
+$(git log $LAST_TAG..HEAD --pretty=format:'* %s' --no-merges)
+
+**Full Changelog**: https://github.com/deanputney/git-wt/compare/$LAST_TAG...$TAG"
+
+echo ""
+echo "✓ Release $TAG created successfully!"
+echo ""
+echo "Release URL: https://github.com/deanputney/git-wt/releases/tag/$TAG"
+'''
+
+[tasks."release:dry-run"]
+description = "Preview what the next release would be without creating it"
+run = '''
+#!/bin/bash
+set -e
+
+# Get last tag version
+LAST_TAG=$(git tag -l --sort=-v:refname | head -1)
+
+if [ -z "$LAST_TAG" ]; then
+  echo "No existing tags found."
+  exit 1
+fi
+
+# Strip 'v' prefix if present
+LAST_VERSION="${LAST_TAG#v}"
+
+# Parse version and bump patch
+if [[ $LAST_VERSION =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+  MAJOR="${BASH_REMATCH[1]}"
+  MINOR="${BASH_REMATCH[2]}"
+  PATCH="${BASH_REMATCH[3]}"
+  NEW_PATCH=$((PATCH + 1))
+  NEW_VERSION="$MAJOR.$MINOR.$NEW_PATCH"
+
+  echo "Current version: $LAST_VERSION"
+  echo "Next version:    $NEW_VERSION"
+  echo ""
+  echo "Changes since $LAST_TAG:"
+  git log $LAST_TAG..HEAD --pretty=format:'* %s' --no-merges
+else
+  echo "Error: Could not parse last version: $LAST_VERSION"
+  exit 1
+fi
+'''

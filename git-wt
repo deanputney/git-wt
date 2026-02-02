@@ -70,12 +70,15 @@ init_new_repo() {
 
     # Register as worktree manually
     repo_root=$(pwd)
-    mkdir -p .git/worktrees/"$primary_branch"
-    echo "gitdir: $repo_root/.git/worktrees/$primary_branch" > "$primary_branch/.git"
-    echo "$repo_root/$primary_branch" > .git/worktrees/"$primary_branch"/gitdir
-    echo "ref: refs/heads/$primary_branch" > .git/worktrees/"$primary_branch"/HEAD
-    touch .git/worktrees/"$primary_branch"/commondir
-    echo "../.." > .git/worktrees/"$primary_branch"/commondir
+    # Convert slashes to dashes for worktree metadata directory name
+    # (git encodes slashes when creating worktree metadata)
+    worktree_name=$(echo "$primary_branch" | tr '/' '-')
+    mkdir -p .git/worktrees/"$worktree_name"
+    echo "gitdir: $repo_root/.git/worktrees/$worktree_name" > "$primary_branch/.git"
+    echo "$repo_root/$primary_branch" > .git/worktrees/"$worktree_name"/gitdir
+    echo "ref: refs/heads/$primary_branch" > .git/worktrees/"$worktree_name"/HEAD
+    touch .git/worktrees/"$worktree_name"/commondir
+    echo "../.." > .git/worktrees/"$worktree_name"/commondir
 
     # Reset the worktree to sync with the commit
     cd "$primary_branch"
@@ -356,18 +359,21 @@ case "$1" in
     mv "$temp_work" "$current_branch"
 
     # Register as worktree manually (git worktree add doesn't work well with existing files)
-    mkdir -p .git/worktrees/"$current_branch"
-    echo "gitdir: $repo_root/.git/worktrees/$current_branch" > "$current_branch/.git"
-    echo "$repo_root/$current_branch" > .git/worktrees/"$current_branch"/gitdir
-    echo "ref: refs/heads/$current_branch" > .git/worktrees/"$current_branch"/HEAD
+    # Convert slashes to dashes for worktree metadata directory name
+    # (git encodes slashes when creating worktree metadata)
+    worktree_name=$(echo "$current_branch" | tr '/' '-')
+    mkdir -p .git/worktrees/"$worktree_name"
+    echo "gitdir: $repo_root/.git/worktrees/$worktree_name" > "$current_branch/.git"
+    echo "$repo_root/$current_branch" > .git/worktrees/"$worktree_name"/gitdir
+    echo "ref: refs/heads/$current_branch" > .git/worktrees/"$worktree_name"/HEAD
 
     # Copy common git files to worktree admin directory
-    touch .git/worktrees/"$current_branch"/commondir
-    echo "../.." > .git/worktrees/"$current_branch"/commondir
+    touch .git/worktrees/"$worktree_name"/commondir
+    echo "../.." > .git/worktrees/"$worktree_name"/commondir
 
     # Restore the index file to preserve staging area state
     if [ -f "$temp_index" ]; then
-      mv "$temp_index" .git/worktrees/"$current_branch"/index
+      mv "$temp_index" .git/worktrees/"$worktree_name"/index
     fi
 
     # Detect primary branch - check for main/master explicitly

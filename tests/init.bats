@@ -10,10 +10,14 @@ setup() {
   TEST_TEMP_DIR="$(mktemp -d)"
   cd "$TEST_TEMP_DIR"
 
-  # Configure git globally for tests
-  git config --global user.name "Test User"
-  git config --global user.email "test@example.com"
-  git config --global init.defaultBranch main
+  # Configure git via environment variables (doesn't affect global config)
+  export GIT_AUTHOR_NAME="Test User"
+  export GIT_AUTHOR_EMAIL="test@example.com"
+  export GIT_COMMITTER_NAME="Test User"
+  export GIT_COMMITTER_EMAIL="test@example.com"
+  export GIT_CONFIG_COUNT=1
+  export GIT_CONFIG_KEY_0="init.defaultBranch"
+  export GIT_CONFIG_VALUE_0="main"
 }
 
 teardown() {
@@ -535,7 +539,7 @@ teardown() {
   echo "hotfix change" >> README.md
 
   # Run
-  run bash "$GIT_WT_SCRIPT" init
+  run bash -c "echo 'Y' | bash '$GIT_WT_SCRIPT' init"
 
   # Assert
   assert_success
@@ -586,7 +590,7 @@ teardown() {
   add_untracked_files
 
   # Run
-  run bash "$GIT_WT_SCRIPT" init
+  run bash -c "echo 'Y' | bash '$GIT_WT_SCRIPT' init"
 
   # Assert
   assert_success

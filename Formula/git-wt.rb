@@ -12,6 +12,7 @@ class GitWt < Formula
 
   def install
     bin.install "git-wt"
+    pkgshare.install "examples"
   end
 
   def post_install

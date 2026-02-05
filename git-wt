@@ -137,6 +137,17 @@ install_hooks() {
   local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   local examples_dir="$script_dir/examples/hooks"
 
+  # If not found, check Homebrew share directory (for brew installations)
+  if [ ! -d "$examples_dir" ]; then
+    # Try common Homebrew locations
+    for prefix in /opt/homebrew /usr/local; do
+      if [ -d "$prefix/share/git-wt/examples/hooks" ]; then
+        examples_dir="$prefix/share/git-wt/examples/hooks"
+        break
+      fi
+    done
+  fi
+
   # Validate hook type and get hook file paths
   local pre_hook=""
   local post_hook=""

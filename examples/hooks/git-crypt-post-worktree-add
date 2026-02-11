@@ -22,8 +22,6 @@ if [ -z "$GIT_WORKTREE_PATH" ]; then
   exit 1
 fi
 
-worktree_path="$GIT_WORKTREE_PATH"
-
 # Restore git-crypt filter settings in the main repo from saved environment variables
 if [ -n "$GIT_WT_SAVED_SMUDGE" ]; then
   git config filter.git-crypt.smudge "$GIT_WT_SAVED_SMUDGE"
@@ -50,30 +48,30 @@ fi
 # Try each worktree until we find one with .git-crypt
 while IFS= read -r wt_path; do
   if [ -d "$wt_path/.git-crypt" ]; then
-    cp -r "$wt_path/.git-crypt" "$worktree_path/" 2>/dev/null || true
+    cp -r "$wt_path/.git-crypt" "$GIT_WORKTREE_PATH/" 2>/dev/null || true
     break
   fi
 done < <(git worktree list --porcelain | grep "^worktree " | cut -d' ' -f2)
 
 # Temporarily disable filters in the worktree to avoid circular dependency during unlock
-git -C "$worktree_path" config filter.git-crypt.smudge "cat"
-git -C "$worktree_path" config filter.git-crypt.clean "cat"
-git -C "$worktree_path" config --unset filter.git-crypt.required || true
+git -C "$GIT_WORKTREE_PATH" config filter.git-crypt.smudge "cat"
+git -C "$GIT_WORKTREE_PATH" config filter.git-crypt.clean "cat"
+git -C "$GIT_WORKTREE_PATH" config --unset filter.git-crypt.required || true
 
 # Unlock git-crypt in the new worktree
-if ! git -C "$worktree_path" crypt unlock 2>/dev/null; then
+if ! git -C "$GIT_WORKTREE_PATH" crypt unlock 2>/dev/null; then
   # Restore filters even if unlock failed (using saved environment variables)
   if [ -n "$GIT_WT_SAVED_SMUDGE" ]; then
-    git -C "$worktree_path" config filter.git-crypt.smudge "$GIT_WT_SAVED_SMUDGE"
+    git -C "$GIT_WORKTREE_PATH" config filter.git-crypt.smudge "$GIT_WT_SAVED_SMUDGE"
   fi
   if [ -n "$GIT_WT_SAVED_CLEAN" ]; then
-    git -C "$worktree_path" config filter.git-crypt.clean "$GIT_WT_SAVED_CLEAN"
+    git -C "$GIT_WORKTREE_PATH" config filter.git-crypt.clean "$GIT_WT_SAVED_CLEAN"
   fi
   if [ -n "$GIT_WT_SAVED_REQUIRED" ]; then
-    git -C "$worktree_path" config filter.git-crypt.required "$GIT_WT_SAVED_REQUIRED"
+    git -C "$GIT_WORKTREE_PATH" config filter.git-crypt.required "$GIT_WT_SAVED_REQUIRED"
   fi
 
-  echo "git-crypt post-worktree-add: Warning: Could not unlock git-crypt in $worktree_path" >&2
+  echo "git-crypt post-worktree-add: Warning: Could not unlock git-crypt in $GIT_WORKTREE_PATH" >&2
   echo "You may need to run 'git crypt unlock' manually in the worktree" >&2
   # Don't fail - the worktree was created successfully
   exit 0
@@ -81,16 +79,16 @@ fi
 
 # Restore proper filter settings (using saved environment variables)
 if [ -n "$GIT_WT_SAVED_SMUDGE" ]; then
-  git -C "$worktree_path" config filter.git-crypt.smudge "$GIT_WT_SAVED_SMUDGE"
+  git -C "$GIT_WORKTREE_PATH" config filter.git-crypt.smudge "$GIT_WT_SAVED_SMUDGE"
 fi
 if [ -n "$GIT_WT_SAVED_CLEAN" ]; then
-  git -C "$worktree_path" config filter.git-crypt.clean "$GIT_WT_SAVED_CLEAN"
+  git -C "$GIT_WORKTREE_PATH" config filter.git-crypt.clean "$GIT_WT_SAVED_CLEAN"
 fi
 if [ -n "$GIT_WT_SAVED_REQUIRED" ]; then
-  git -C "$worktree_path" config filter.git-crypt.required "$GIT_WT_SAVED_REQUIRED"
+  git -C "$GIT_WORKTREE_PATH" config filter.git-crypt.required "$GIT_WT_SAVED_REQUIRED"
 fi
 
 # Final checkout to decrypt all files
-git -C "$worktree_path" reset --hard HEAD --quiet
+git -C "$GIT_WORKTREE_PATH" reset --hard HEAD --quiet
 
 exit 0

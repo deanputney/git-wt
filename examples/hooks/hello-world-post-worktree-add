@@ -13,12 +13,14 @@
 #   cp examples/hooks/hello-world-post-worktree-add .git/hooks/post-worktree-add
 #   chmod +x .git/hooks/pre-worktree-add .git/hooks/post-worktree-add
 
-# First argument is the worktree path
-worktree_path="$1"
-
 echo "✨ Hello from post-worktree-add hook!"
-echo "   Successfully created worktree at: $worktree_path"
+echo "   Successfully created worktree at: $GIT_WORKTREE_PATH"
 echo "   All arguments: $*"
+echo ""
+echo "   Environment variables:"
+echo "   - GIT_WORKTREE_PATH: $GIT_WORKTREE_PATH"
+echo "   - GIT_BRANCH: ${GIT_BRANCH:-<not set>}"
+echo "   - GIT_COMMITISH: ${GIT_COMMITISH:-<not set>}"
 
 # Exit 0 to indicate success
 exit 0

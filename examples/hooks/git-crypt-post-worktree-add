@@ -16,13 +16,13 @@ if ! git config --get filter.git-crypt.smudge >/dev/null 2>&1; then
   exit 0
 fi
 
-# First argument is the worktree path
-worktree_path="$1"
-
-if [ -z "$worktree_path" ]; then
-  echo "git-crypt post-worktree-add: No worktree path provided" >&2
+# Use GIT_WORKTREE_PATH environment variable set by git-wt
+if [ -z "$GIT_WORKTREE_PATH" ]; then
+  echo "git-crypt post-worktree-add: GIT_WORKTREE_PATH not set" >&2
   exit 1
 fi
+
+worktree_path="$GIT_WORKTREE_PATH"
 
 # Restore git-crypt filter settings in the main repo from saved environment variables
 if [ -n "$GIT_WT_SAVED_SMUDGE" ]; then

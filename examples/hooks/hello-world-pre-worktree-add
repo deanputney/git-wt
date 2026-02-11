@@ -15,6 +15,11 @@
 
 echo "👋 Hello from pre-worktree-add hook!"
 echo "   About to create worktree with arguments: $*"
+echo ""
+echo "   Environment variables:"
+echo "   - GIT_WORKTREE_PATH: $GIT_WORKTREE_PATH"
+echo "   - GIT_BRANCH: ${GIT_BRANCH:-<not set>}"
+echo "   - GIT_COMMITISH: ${GIT_COMMITISH:-<not set>}"
 
 # Exit 0 to allow the worktree creation to proceed
 exit 0

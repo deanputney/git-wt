@@ -352,8 +352,83 @@ case "$1" in
   a|add)
     shift
 
-    # Run pre-worktree-add hook with the arguments that will be passed to git worktree add
-    run_hook "pre-worktree-add" "$@"
+    # Store original arguments for git worktree add and hooks
+    original_args=("$@")
+
+    # Parse arguments to extract worktree path and branch information
+    worktree_path=""
+    branch_from_option=""
+    commitish=""
+    detach_flag=false
+
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        -b|-B|--branch|--orphan)
+          if [ $# -lt 2 ]; then
+            echo "git-wt: option '$1' requires an argument" >&2
+            exit 1
+          fi
+          branch_from_option="$2"
+          shift 2
+          ;;
+        -b=*|--branch=*|-B=*|--orphan=*)
+          branch_from_option="${1#*=}"
+          shift
+          ;;
+        --reason)
+          if [ $# -lt 2 ]; then
+            echo "git-wt: option '$1' requires an argument" >&2
+            exit 1
+          fi
+          shift 2
+          ;;
+        --detach)
+          detach_flag=true
+          shift
+          ;;
+        --force|-f|--checkout|--lock|--guess|--no-guess|--track|--no-track|-q|--quiet)
+          shift
+          ;;
+        -*)
+          # Unknown option - skip it (might be valid git option)
+          shift
+          ;;
+        *)
+          # Positional argument
+          if [ -z "$worktree_path" ]; then
+            worktree_path="$1"
+          else
+            commitish="$1"
+          fi
+          shift
+          ;;
+      esac
+    done
+
+    # Validate we found a worktree path
+    if [ -z "$worktree_path" ]; then
+      echo "git-wt: No worktree path found in arguments" >&2
+      exit 1
+    fi
+
+    # Set environment variables for hooks
+    export GIT_WORKTREE_PATH="$worktree_path"
+
+    # Determine branch name for pre-hook
+    if [ "$detach_flag" = false ]; then
+      if [ -n "$branch_from_option" ]; then
+        export GIT_BRANCH="$branch_from_option"
+      elif [ -n "$commitish" ]; then
+        export GIT_BRANCH="$commitish"
+      fi
+    fi
+
+    if [ -n "$commitish" ]; then
+      export GIT_COMMITISH="$commitish"
+    fi
+
+    # Run pre-worktree-add hook
+    run_hook "pre-worktree-add" "${original_args[@]}"
     hook_status=$?
 
     if [ $hook_status -ne 0 ]; then
@@ -361,11 +436,8 @@ case "$1" in
       exit $hook_status
     fi
 
-    # Extract the worktree path (first argument)
-    worktree_path="$1"
-
     # Create the worktree
-    git worktree add "$@"
+    git worktree add "${original_args[@]}"
     add_status=$?
 
     if [ $add_status -ne 0 ]; then
@@ -373,8 +445,19 @@ case "$1" in
       exit $add_status
     fi
 
-    # Run post-worktree-add hook with the worktree path and all original arguments
-    run_hook "post-worktree-add" "$worktree_path" "$@"
+    # For post-hook, query the actual branch from the created worktree
+    if [ -d "$worktree_path" ]; then
+      actual_branch=$(cd "$worktree_path" && git symbolic-ref --short HEAD 2>/dev/null || echo "")
+      if [ -n "$actual_branch" ]; then
+        export GIT_BRANCH="$actual_branch"
+      else
+        # Detached HEAD - unset GIT_BRANCH
+        unset GIT_BRANCH
+      fi
+    fi
+
+    # Run post-worktree-add hook
+    run_hook "post-worktree-add" "${original_args[@]}"
     hook_status=$?
 
     if [ $hook_status -ne 0 ]; then

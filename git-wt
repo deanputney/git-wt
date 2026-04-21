@@ -527,6 +527,114 @@ remove_worktree() {
   fi
 }
 
+# List command: show all worktrees with cleanup-relevant status tags
+cmd_list() {
+  local primary_branch
+  primary_branch=$(get_primary_branch)
+
+  # Compute repo root (parent of bare .git dir) for relative path display
+  local git_common_dir repo_root
+  git_common_dir=$(git rev-parse --git-common-dir 2>/dev/null)
+  repo_root=$(dirname "$git_common_dir")
+
+  # Parse ALL worktrees including bare and primary
+  local -a all_paths=() all_branches=() all_bares=()
+  local cur_path="" cur_branch="" is_bare=false has_entry=false
+
+  while IFS= read -r line; do
+    if [[ "$line" == worktree\ * ]]; then
+      if [ "$has_entry" = true ]; then
+        all_paths+=("$cur_path")
+        all_branches+=("$cur_branch")
+        all_bares+=("$is_bare")
+      fi
+      cur_path="${line#worktree }"
+      cur_branch="" is_bare=false has_entry=true
+    elif [[ "$line" == branch\ * ]]; then
+      cur_branch="${line#branch }"
+    elif [[ "$line" == "bare" ]]; then
+      is_bare=true
+    fi
+  done < <(git worktree list --porcelain 2>/dev/null)
+  [ "$has_entry" = true ] && all_paths+=("$cur_path") && all_branches+=("$cur_branch") && all_bares+=("$is_bare")
+
+  local C_PRIMARY=$'\033[45;30m'  # magenta bg, black text
+  local C_MERGED=$'\033[42;30m'   # green bg, black text
+  local C_STALE=$'\033[43;30m'    # yellow bg, black text
+  local C_EMPTY=$'\033[46;30m'    # cyan bg, black text
+  local C_DIRTY=$'\033[41;30m'    # red bg, black text
+  local C_AHEAD=$'\033[90m'       # dark gray text
+  local C_RESET=$'\033[0m'
+
+  echo "Worktrees:"
+  local i
+  for i in "${!all_paths[@]}"; do
+    local wt_path="${all_paths[$i]}"
+    local wt_branch="${all_branches[$i]}"
+    local wt_is_bare="${all_bares[$i]}"
+    local display="${wt_path#${repo_root}/}"
+
+    if [ "$wt_is_bare" = true ]; then
+      printf "  %-30s (bare)\n" "$display"
+      continue
+    fi
+
+    local short_branch="${wt_branch#refs/heads/}"
+    local tag_parts=() tags=""
+
+    if [ "$short_branch" = "$primary_branch" ]; then
+      tag_parts+=("${C_PRIMARY} primary ${C_RESET}")
+    else
+      # Dirty
+      if [ -n "$(git -C "$wt_path" status --porcelain 2>/dev/null)" ]; then
+        tag_parts+=("${C_DIRTY} dirty ${C_RESET}")
+      fi
+
+      # Merged (fully) or merged-but-ahead
+      if check_merged "$wt_path" "$short_branch" "$primary_branch" 2>/dev/null; then
+        tag_parts+=("${C_MERGED} merged ${C_RESET}")
+      else
+        local merge_base ahead_count=0 was_pr_merged=false
+        merge_base=$(git merge-base "refs/heads/$short_branch" "refs/heads/$primary_branch" 2>/dev/null)
+        if [ -n "$merge_base" ]; then
+          ahead_count=$(git rev-list "${merge_base}..refs/heads/$short_branch" --count 2>/dev/null || echo 0)
+          if [ "$ahead_count" -gt 0 ]; then
+            # If merge_base is a non-first parent of a merge commit on primary, the branch was merged
+            if git log "refs/heads/$primary_branch" --merges --format="%P" 2>/dev/null \
+               | tr ' ' '\n' | grep -q "^${merge_base}$"; then
+              was_pr_merged=true
+            fi
+          fi
+        fi
+        if [ "$was_pr_merged" = true ]; then
+          tag_parts+=("${C_MERGED} merged ${C_RESET}")
+        fi
+        if [ "$ahead_count" -gt 0 ]; then
+          tag_parts+=("${C_AHEAD}ahead ${ahead_count}${C_RESET}")
+        fi
+      fi
+
+      # Stale (skip if dirty — check_stale handles this internally)
+      LAST_COMMIT_TIME=""
+      if check_stale "$wt_path" 30 2>/dev/null; then
+        tag_parts+=("${C_STALE} stale ($(format_time_short "$LAST_COMMIT_TIME")) ${C_RESET}")
+      fi
+
+      # Empty
+      if check_empty "$wt_path" "$primary_branch" 2>/dev/null; then
+        tag_parts+=("${C_EMPTY} empty ${C_RESET}")
+      fi
+    fi
+
+    local t
+    for t in "${tag_parts[@]}"; do
+      [ -z "$tags" ] && tags="$t" || tags="${tags} ${t}"
+    done
+
+    printf "  %-30s %s  (%s)\n" "$display" "$tags" "$wt_branch"
+  done
+}
+
 # Clean command: remove merged, stale, or empty worktrees
 cmd_clean() {
   local dry_run=false
@@ -806,7 +914,7 @@ case "$1" in
 
   ls|list)
     shift
-    git worktree list
+    cmd_list "$@"
     ;;
 
   cl|clone)

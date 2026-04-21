@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VERSION="0.0.6"
+VERSION="0.0.7"
 
 # Helper function to find the common git directory where hooks are stored
 find_git_common_dir() {
@@ -47,6 +47,7 @@ COMMANDS:
   remove <path>              Remove a worktree (alias: rm)
   list                       List all worktrees (alias: ls)
   install-hooks <type>       Install hook examples (e.g., git-crypt)
+  clean [merge|stale|empty]  Remove merged, stale, or empty worktrees
   setup [--config-only]      Install git-wt and configure git alias
 
       Note: If you installed via Homebrew, you don't need to run this.
@@ -348,6 +349,336 @@ init_new_repo() {
   git worktree list
 }
 
+# Helper: Get primary branch name (main, master, or from remote HEAD)
+get_primary_branch() {
+  local primary
+  primary=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')
+  if [ -n "$primary" ]; then
+    echo "$primary"
+    return 0
+  fi
+  if git rev-parse --verify refs/heads/main >/dev/null 2>&1; then
+    echo "main"
+  elif git rev-parse --verify refs/heads/master >/dev/null 2>&1; then
+    echo "master"
+  else
+    git rev-parse --abbrev-ref HEAD 2>/dev/null
+  fi
+}
+
+# Helper: Parse all non-primary worktrees into global arrays
+# Populates: WORKTREE_PATHS, WORKTREE_HEADS, WORKTREE_BRANCHES
+# Skips: first entry (bare/main repo root) and entries marked bare
+get_worktrees() {
+  WORKTREE_PATHS=()
+  WORKTREE_HEADS=()
+  WORKTREE_BRANCHES=()
+
+  local entry_num=0
+  local cur_path="" cur_head="" cur_branch="" is_bare=false
+
+  while IFS= read -r line; do
+    if [[ "$line" == worktree\ * ]]; then
+      if [ $entry_num -gt 1 ] && [ "$is_bare" = false ] && [ -n "$cur_path" ]; then
+        WORKTREE_PATHS+=("$cur_path")
+        WORKTREE_HEADS+=("$cur_head")
+        WORKTREE_BRANCHES+=("$cur_branch")
+      fi
+      entry_num=$((entry_num + 1))
+      cur_path="${line#worktree }"
+      cur_head=""
+      cur_branch=""
+      is_bare=false
+    elif [[ "$line" == HEAD\ * ]]; then
+      cur_head="${line#HEAD }"
+    elif [[ "$line" == branch\ * ]]; then
+      cur_branch="${line#branch }"
+    elif [[ "$line" == "bare" ]]; then
+      is_bare=true
+    fi
+  done < <(git worktree list --porcelain 2>/dev/null)
+
+  # Save last entry
+  if [ $entry_num -gt 1 ] && [ "$is_bare" = false ] && [ -n "$cur_path" ]; then
+    WORKTREE_PATHS+=("$cur_path")
+    WORKTREE_HEADS+=("$cur_head")
+    WORKTREE_BRANCHES+=("$cur_branch")
+  fi
+}
+
+# Helper: Format a unix timestamp as human-readable time ago
+format_time_ago() {
+  local timestamp="$1"
+  local now diff
+  now=$(date +%s)
+  diff=$((now - timestamp))
+
+  if [ $diff -lt 3600 ]; then
+    local minutes=$((diff / 60))
+    [ $minutes -le 1 ] && echo "1 minute ago" || echo "${minutes} minutes ago"
+  elif [ $diff -lt 86400 ]; then
+    local hours=$((diff / 3600))
+    [ $hours -eq 1 ] && echo "1 hour ago" || echo "${hours} hours ago"
+  elif [ $diff -lt 2592000 ]; then
+    local days=$((diff / 86400))
+    [ $days -eq 1 ] && echo "1 day ago" || echo "${days} days ago"
+  else
+    local months=$((diff / 2592000))
+    [ $months -eq 1 ] && echo "1 month ago" || echo "${months} months ago"
+  fi
+}
+
+# Helper: Format a unix timestamp as short abbreviated duration (e.g. "2 mo", "14 d")
+format_time_short() {
+  local timestamp="$1"
+  local now diff
+  now=$(date +%s)
+  diff=$((now - timestamp))
+
+  if [ $diff -lt 3600 ]; then
+    echo "$((diff / 60)) min"
+  elif [ $diff -lt 86400 ]; then
+    echo "$((diff / 3600)) h"
+  elif [ $diff -lt 2592000 ]; then
+    echo "$((diff / 86400)) d"
+  else
+    echo "$((diff / 2592000)) mo"
+  fi
+}
+
+# Helper: Format a unix timestamp as YYYY-MM-DD HH:MM
+format_date() {
+  local timestamp="$1"
+  date -d "@${timestamp}" "+%Y-%m-%d %H:%M" 2>/dev/null \
+    || date -r "${timestamp}" "+%Y-%m-%d %H:%M" 2>/dev/null
+}
+
+# Helper: Check if a worktree branch is fully merged into the primary branch
+# Returns 0 if merged (branch is ancestor of primary and no diverged HEAD)
+check_merged() {
+  local worktree_path="$1"
+  local short_branch="$2"
+  local primary_branch="$3"
+
+  if ! git merge-base --is-ancestor "refs/heads/$short_branch" "$primary_branch" 2>/dev/null; then
+    return 1
+  fi
+
+  local wt_head branch_head
+  wt_head=$(git -C "$worktree_path" rev-parse HEAD 2>/dev/null)
+  branch_head=$(git rev-parse "refs/heads/$short_branch" 2>/dev/null)
+
+  [ "$wt_head" = "$branch_head" ]
+}
+
+# Helper: Check if a worktree is stale (no commit in N days, no uncommitted changes)
+# Sets global LAST_COMMIT_TIME on success
+# Returns 0 if stale
+check_stale() {
+  local worktree_path="$1"
+  local days="$2"
+
+  local last_commit
+  last_commit=$(git -C "$worktree_path" log -1 --format="%ct" 2>/dev/null)
+
+  if [ -z "$last_commit" ]; then
+    return 1
+  fi
+
+  LAST_COMMIT_TIME="$last_commit"
+
+  if [ -n "$(git -C "$worktree_path" status --porcelain 2>/dev/null)" ]; then
+    return 1
+  fi
+
+  local now age threshold
+  now=$(date +%s)
+  age=$((now - last_commit))
+  threshold=$((days * 86400))
+
+  [ $age -gt $threshold ]
+}
+
+# Helper: Check if a worktree has no unique commits and no uncommitted changes
+# Returns 0 if empty
+check_empty() {
+  local worktree_path="$1"
+  local primary_branch="$2"
+
+  if [ -n "$(git -C "$worktree_path" status --porcelain 2>/dev/null)" ]; then
+    return 1
+  fi
+
+  git -C "$worktree_path" merge-base --is-ancestor HEAD "$primary_branch" 2>/dev/null
+}
+
+# Helper: Remove a worktree, or print what would be removed in dry-run mode
+remove_worktree() {
+  local worktree_path="$1"
+  local dry_run="$2"
+
+  if [ "$dry_run" = true ]; then
+    echo "Would remove: $worktree_path"
+    return 0
+  fi
+
+  if ! git worktree remove "$worktree_path" 2>/dev/null; then
+    git worktree remove --force "$worktree_path"
+  fi
+}
+
+# Clean command: remove merged, stale, or empty worktrees
+cmd_clean() {
+  local dry_run=false
+  local force=false
+  local subcommand=""
+  local days=30
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -n|--dry-run|--dry)
+        dry_run=true
+        shift
+        ;;
+      -f|--force)
+        force=true
+        shift
+        ;;
+      merge|stale|empty)
+        subcommand="$1"
+        shift
+        ;;
+      [0-9]*)
+        days="$1"
+        shift
+        ;;
+      *)
+        echo "git-wt clean: unknown option '$1'" >&2
+        exit 1
+        ;;
+    esac
+  done
+
+  local primary_branch
+  primary_branch=$(get_primary_branch)
+  if [ -z "$primary_branch" ]; then
+    echo "git-wt clean: could not determine primary branch" >&2
+    exit 1
+  fi
+
+  get_worktrees
+
+  local candidate_paths=()
+  local candidate_tags=()
+  local candidate_branches=()
+
+  local i
+  for i in "${!WORKTREE_PATHS[@]}"; do
+    local wt_path="${WORKTREE_PATHS[$i]}"
+    local wt_branch="${WORKTREE_BRANCHES[$i]}"
+
+    # Skip detached HEAD worktrees
+    if [ -z "$wt_branch" ]; then
+      continue
+    fi
+
+    local short_branch="${wt_branch#refs/heads/}"
+
+    # Skip the primary branch worktree
+    if [ "$short_branch" = "$primary_branch" ]; then
+      continue
+    fi
+
+    local is_merged=false is_stale=false is_empty=false
+    local stale_short=""
+
+    if [ -z "$subcommand" ] || [ "$subcommand" = "merge" ]; then
+      if check_merged "$wt_path" "$short_branch" "$primary_branch"; then
+        is_merged=true
+      fi
+    fi
+
+    if [ -z "$subcommand" ] || [ "$subcommand" = "stale" ]; then
+      LAST_COMMIT_TIME=""
+      if check_stale "$wt_path" "$days"; then
+        is_stale=true
+        stale_short=$(format_time_short "$LAST_COMMIT_TIME")
+      fi
+    fi
+
+    if [ -z "$subcommand" ] || [ "$subcommand" = "empty" ]; then
+      if check_empty "$wt_path" "$primary_branch"; then
+        is_empty=true
+      fi
+    fi
+
+    local is_candidate=false
+    case "$subcommand" in
+      merge) [ "$is_merged" = true ] && is_candidate=true ;;
+      stale) [ "$is_stale" = true ] && is_candidate=true ;;
+      empty) [ "$is_empty" = true ] && is_candidate=true ;;
+      *)
+        if [ "$is_merged" = true ] || [ "$is_stale" = true ] || [ "$is_empty" = true ]; then
+          is_candidate=true
+        fi
+        ;;
+    esac
+
+    if [ "$is_candidate" = true ]; then
+      local C_MERGED=$'\033[42;30m'  # green bg, black text
+      local C_STALE=$'\033[43;30m'   # yellow bg, black text
+      local C_EMPTY=$'\033[46;30m'   # cyan bg, black text
+      local C_RESET=$'\033[0m'
+
+      local tag_parts=()
+      [ "$is_merged" = true ] && tag_parts+=("${C_MERGED} merged ${C_RESET}")
+      [ "$is_stale" = true ]  && tag_parts+=("${C_STALE} stale (${stale_short}) ${C_RESET}")
+      [ "$is_empty" = true ]  && tag_parts+=("${C_EMPTY} empty ${C_RESET}")
+
+      local tag_str="" t
+      for t in "${tag_parts[@]}"; do
+        [ -z "$tag_str" ] && tag_str="$t" || tag_str="${tag_str} ${t}"
+      done
+
+      candidate_paths+=("$wt_path")
+      candidate_tags+=("$tag_str")
+      candidate_branches+=("$wt_branch")
+    fi
+  done
+
+  if [ ${#candidate_paths[@]} -eq 0 ]; then
+    echo "No worktrees to clean."
+    exit 0
+  fi
+
+  echo "Worktrees to clean:"
+  for i in "${!candidate_paths[@]}"; do
+    printf "  %-40s %s  (%s)\n" \
+      "${candidate_paths[$i]}" \
+      "${candidate_tags[$i]}" \
+      "${candidate_branches[$i]}"
+  done
+  echo ""
+
+  if [ "$dry_run" = true ]; then
+    echo "Dry run — no changes made."
+    exit 0
+  fi
+
+  if [ "$force" = false ]; then
+    local count=${#candidate_paths[@]}
+    read -p "Remove ${count} worktree(s)? [y/N] " -r response
+    if [[ ! "$response" =~ ^[Yy]$ ]]; then
+      echo "Aborted."
+      exit 0
+    fi
+  fi
+
+  for i in "${!candidate_paths[@]}"; do
+    remove_worktree "${candidate_paths[$i]}" "$dry_run"
+  done
+}
+
 case "$1" in
   a|add)
     shift
@@ -466,6 +797,11 @@ case "$1" in
   rm|remove)
     shift
     git worktree remove "$@"
+    ;;
+
+  clean)
+    shift
+    cmd_clean "$@"
     ;;
 
   ls|list)

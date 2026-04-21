@@ -137,6 +137,35 @@ After running `git wt init`:
 
 **Note**: `git wt init` will warn you if you have uncommitted changes or untracked files, and ask for confirmation before proceeding. All your work will be safely preserved in the worktree directory.
 
+## Clean
+
+As you work across many branches, worktrees accumulate. `git wt clean` finds and removes the ones you no longer need.
+
+```bash
+git wt clean              # find all stale, merged, or empty worktrees
+git wt clean merge        # worktrees whose branch has been merged into main
+git wt clean stale [days] # worktrees with no activity in N days (default: 30)
+git wt clean empty        # worktrees with no commits and no uncommitted changes
+```
+
+Each candidate is shown with a color-coded tag before you confirm:
+
+```
+Worktrees to clean:
+  /my-repo/feature/auth        [merged]              (refs/heads/feature/auth)
+  /my-repo/spike/old-idea      [stale (47 d)]        (refs/heads/spike/old-idea)
+  /my-repo/scratch/test        [empty]               (refs/heads/scratch/test)
+
+Remove 3 worktree(s)? [y/N]
+```
+
+Use `--dry-run` to preview without making changes, or `--force` to skip the confirmation prompt.
+
+```bash
+git wt clean --dry-run
+git wt clean merge --force
+```
+
 ## Hooks
 
 git-wt supports custom hooks for advanced workflows. To install the built-in git-crypt hooks:

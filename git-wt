@@ -428,6 +428,24 @@ format_time_ago() {
   fi
 }
 
+# Helper: Format a unix timestamp as short abbreviated duration (e.g. "2 mo", "14 d")
+format_time_short() {
+  local timestamp="$1"
+  local now diff
+  now=$(date +%s)
+  diff=$((now - timestamp))
+
+  if [ $diff -lt 3600 ]; then
+    echo "$((diff / 60)) min"
+  elif [ $diff -lt 86400 ]; then
+    echo "$((diff / 3600)) h"
+  elif [ $diff -lt 2592000 ]; then
+    echo "$((diff / 86400)) d"
+  else
+    echo "$((diff / 2592000)) mo"
+  fi
+}
+
 # Helper: Format a unix timestamp as YYYY-MM-DD HH:MM
 format_date() {
   local timestamp="$1"
@@ -572,7 +590,7 @@ cmd_clean() {
     fi
 
     local is_merged=false is_stale=false is_empty=false
-    local stale_date="" stale_ago=""
+    local stale_short=""
 
     if [ -z "$subcommand" ] || [ "$subcommand" = "merge" ]; then
       if check_merged "$wt_path" "$short_branch" "$primary_branch"; then
@@ -584,8 +602,7 @@ cmd_clean() {
       LAST_COMMIT_TIME=""
       if check_stale "$wt_path" "$days"; then
         is_stale=true
-        stale_date=$(format_date "$LAST_COMMIT_TIME")
-        stale_ago=$(format_time_ago "$LAST_COMMIT_TIME")
+        stale_short=$(format_time_short "$LAST_COMMIT_TIME")
       fi
     fi
 
@@ -608,18 +625,23 @@ cmd_clean() {
     esac
 
     if [ "$is_candidate" = true ]; then
+      local C_MERGED=$'\033[42;30m'  # green bg, black text
+      local C_STALE=$'\033[43;30m'   # yellow bg, black text
+      local C_EMPTY=$'\033[46;30m'   # cyan bg, black text
+      local C_RESET=$'\033[0m'
+
       local tag_parts=()
-      [ "$is_merged" = true ] && tag_parts+=("merged")
-      [ "$is_stale" = true ] && tag_parts+=("stale: ${stale_date}, ${stale_ago}")
-      [ "$is_empty" = true ] && tag_parts+=("empty")
+      [ "$is_merged" = true ] && tag_parts+=("${C_MERGED} merged ${C_RESET}")
+      [ "$is_stale" = true ]  && tag_parts+=("${C_STALE} stale (${stale_short}) ${C_RESET}")
+      [ "$is_empty" = true ]  && tag_parts+=("${C_EMPTY} empty ${C_RESET}")
 
       local tag_str="" t
       for t in "${tag_parts[@]}"; do
-        [ -z "$tag_str" ] && tag_str="$t" || tag_str="${tag_str}, ${t}"
+        [ -z "$tag_str" ] && tag_str="$t" || tag_str="${tag_str} ${t}"
       done
 
       candidate_paths+=("$wt_path")
-      candidate_tags+=("[${tag_str}]")
+      candidate_tags+=("$tag_str")
       candidate_branches+=("$wt_branch")
     fi
   done
@@ -631,7 +653,7 @@ cmd_clean() {
 
   echo "Worktrees to clean:"
   for i in "${!candidate_paths[@]}"; do
-    printf "  %-35s %-55s (%s)\n" \
+    printf "  %-40s %s  (%s)\n" \
       "${candidate_paths[$i]}" \
       "${candidate_tags[$i]}" \
       "${candidate_branches[$i]}"

@@ -10,7 +10,8 @@ git-wt aims to solve these problems:
 
 * Where do you put a new worktree when you create one?
 * Do you need to add your worktree to .gitignore?
-* Why are the `git worktree` commands long and unfamiliar in Unix terms? 
+* Why are the `git worktree` commands long and unfamiliar in Unix terms?
+* How do you clean up completed worktrees? Which ones are still in use?
 
 git-wt allows you to create a new git alias `git wt` for working with worktrees.
 

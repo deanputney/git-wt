@@ -48,6 +48,24 @@ git wt rm (alias for remove)
 git wt a (alias for add)
 ```
 
+## List
+
+`git wt list` (or `git wt ls`) shows all worktrees with color-coded status tags so you can see the state of your work at a glance:
+
+```
+Worktrees:
+  .git                  (bare)
+  main                  [primary]             (refs/heads/main)
+  feat/auth             [merged]              (refs/heads/feat/auth)
+  feat/old              [merged] ahead 1      (refs/heads/feat/old)
+  spike/idea            [stale: 47d]          (refs/heads/spike/idea)
+  scratch/test          [empty]               (refs/heads/scratch/test)
+  feat/wip              [dirty]               (refs/heads/feat/wip)
+  feat/active           ahead 3               (refs/heads/feat/active)
+```
+
+Worktrees tagged `merged`, `stale`, or `empty` are candidates for `git wt clean`.
+
 ## Clone
 
 `git wt` adds an opinionated `clone` feature for organizing a new repository with worktrees. `git wt clone` creates an empty directory for your repository, checks out the `.git` directory inside it, and **leaves the rest of your directory as clean empty space for your worktree directories**.

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VERSION="0.0.7"
+VERSION="0.0.8"
 
 # Helper function to find the common git directory where hooks are stored
 find_git_common_dir() {

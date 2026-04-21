@@ -64,14 +64,16 @@ rm -f git-wt.bak
 echo "Updated VERSION to $NEW_VERSION"
 echo ""
 
-# Commit the version change
-echo "Committing version bump..."
+# Commit the version change if needed
 git add git-wt
-git commit -m "Bump version to $NEW_VERSION"
-
-# Push the commit
-echo "Pushing version bump commit..."
-git push origin HEAD
+if git diff --staged --quiet; then
+  echo "Version already at $NEW_VERSION in script, skipping commit"
+else
+  echo "Committing version bump..."
+  git commit -m "Bump version to $NEW_VERSION"
+  echo "Pushing version bump commit..."
+  git push origin HEAD
+fi
 
 # Get last tag for changelog
 LAST_TAG=$(git tag -l --sort=-v:refname | head -1)

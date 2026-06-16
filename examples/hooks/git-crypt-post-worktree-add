@@ -22,21 +22,57 @@ if [ -z "$GIT_WORKTREE_PATH" ]; then
   exit 1
 fi
 
-# Restore git-crypt filter settings in the main repo from saved environment variables
-if [ -n "$GIT_WT_SAVED_SMUDGE" ]; then
-  git config filter.git-crypt.smudge "$GIT_WT_SAVED_SMUDGE"
+# Make a saved git-crypt filter value portable across machines.
+#
+# `git-crypt unlock` records the absolute path of the git-crypt binary it was
+# invoked with into the filter config (e.g. /opt/homebrew/bin/git-crypt on
+# macOS). Restoring that verbatim breaks on a machine where git-crypt lives
+# elsewhere (e.g. /usr/bin in a Linux container/CI). Strip only the leading
+# absolute path, leaving the bare `git-crypt` command for PATH to resolve, and
+# preserve the subcommand and any arguments (e.g. `--key-name=NAME`).
+#   /opt/homebrew/bin/git-crypt smudge             -> git-crypt smudge
+#   "/opt/homebrew/bin/git-crypt" smudge --key-name=foo -> git-crypt smudge --key-name=foo
+#   git-crypt clean                                -> git-crypt clean  (unchanged)
+normalize_git_crypt_filter () {
+  printf '%s' "$1" | sed -E 's#^"?[^"]*/git-crypt"? #git-crypt #'
+}
+
+# Load the git-crypt filter settings saved by the pre-hook. git-wt runs hooks
+# as subprocesses without propagating their environment, so the pre-hook wrote
+# them to a state file; prefer that, and fall back to the legacy GIT_WT_SAVED_*
+# env vars for compatibility with older installs.
+SAVED_SMUDGE="$GIT_WT_SAVED_SMUDGE"
+SAVED_CLEAN="$GIT_WT_SAVED_CLEAN"
+SAVED_REQUIRED="$GIT_WT_SAVED_REQUIRED"
+
+GIT_WT_GIT_CRYPT_STATE="$(git rev-parse --git-common-dir)/git-wt-git-crypt-state"
+if [ -f "$GIT_WT_GIT_CRYPT_STATE" ]; then
+  while IFS= read -r line; do
+    case "$line" in
+      SMUDGE=*)   SAVED_SMUDGE="${line#SMUDGE=}" ;;
+      CLEAN=*)    SAVED_CLEAN="${line#CLEAN=}" ;;
+      REQUIRED=*) SAVED_REQUIRED="${line#REQUIRED=}" ;;
+    esac
+  done < "$GIT_WT_GIT_CRYPT_STATE"
+  rm -f "$GIT_WT_GIT_CRYPT_STATE"
+fi
+
+# Restore git-crypt filter settings in the main repo (normalized so the binary
+# path resolves via PATH on this machine).
+if [ -n "$SAVED_SMUDGE" ]; then
+  git config filter.git-crypt.smudge "$(normalize_git_crypt_filter "$SAVED_SMUDGE")"
 else
   git config --unset filter.git-crypt.smudge || true
 fi
 
-if [ -n "$GIT_WT_SAVED_CLEAN" ]; then
-  git config filter.git-crypt.clean "$GIT_WT_SAVED_CLEAN"
+if [ -n "$SAVED_CLEAN" ]; then
+  git config filter.git-crypt.clean "$(normalize_git_crypt_filter "$SAVED_CLEAN")"
 else
   git config --unset filter.git-crypt.clean || true
 fi
 
-if [ -n "$GIT_WT_SAVED_REQUIRED" ]; then
-  git config filter.git-crypt.required "$GIT_WT_SAVED_REQUIRED"
+if [ -n "$SAVED_REQUIRED" ]; then
+  git config filter.git-crypt.required "$SAVED_REQUIRED"
 else
   git config --unset filter.git-crypt.required || true
 fi
@@ -60,15 +96,15 @@ git -C "$GIT_WORKTREE_PATH" config --unset filter.git-crypt.required || true
 
 # Unlock git-crypt in the new worktree
 if ! git -C "$GIT_WORKTREE_PATH" crypt unlock 2>/dev/null; then
-  # Restore filters even if unlock failed (using saved environment variables)
-  if [ -n "$GIT_WT_SAVED_SMUDGE" ]; then
-    git -C "$GIT_WORKTREE_PATH" config filter.git-crypt.smudge "$GIT_WT_SAVED_SMUDGE"
+  # Restore filters even if unlock failed (normalized to resolve via PATH)
+  if [ -n "$SAVED_SMUDGE" ]; then
+    git -C "$GIT_WORKTREE_PATH" config filter.git-crypt.smudge "$(normalize_git_crypt_filter "$SAVED_SMUDGE")"
   fi
-  if [ -n "$GIT_WT_SAVED_CLEAN" ]; then
-    git -C "$GIT_WORKTREE_PATH" config filter.git-crypt.clean "$GIT_WT_SAVED_CLEAN"
+  if [ -n "$SAVED_CLEAN" ]; then
+    git -C "$GIT_WORKTREE_PATH" config filter.git-crypt.clean "$(normalize_git_crypt_filter "$SAVED_CLEAN")"
   fi
-  if [ -n "$GIT_WT_SAVED_REQUIRED" ]; then
-    git -C "$GIT_WORKTREE_PATH" config filter.git-crypt.required "$GIT_WT_SAVED_REQUIRED"
+  if [ -n "$SAVED_REQUIRED" ]; then
+    git -C "$GIT_WORKTREE_PATH" config filter.git-crypt.required "$SAVED_REQUIRED"
   fi
 
   echo "git-crypt post-worktree-add: Warning: Could not unlock git-crypt in $GIT_WORKTREE_PATH" >&2
@@ -77,15 +113,15 @@ if ! git -C "$GIT_WORKTREE_PATH" crypt unlock 2>/dev/null; then
   exit 0
 fi
 
-# Restore proper filter settings (using saved environment variables)
-if [ -n "$GIT_WT_SAVED_SMUDGE" ]; then
-  git -C "$GIT_WORKTREE_PATH" config filter.git-crypt.smudge "$GIT_WT_SAVED_SMUDGE"
+# Restore proper filter settings (normalized to resolve via PATH on this machine)
+if [ -n "$SAVED_SMUDGE" ]; then
+  git -C "$GIT_WORKTREE_PATH" config filter.git-crypt.smudge "$(normalize_git_crypt_filter "$SAVED_SMUDGE")"
 fi
-if [ -n "$GIT_WT_SAVED_CLEAN" ]; then
-  git -C "$GIT_WORKTREE_PATH" config filter.git-crypt.clean "$GIT_WT_SAVED_CLEAN"
+if [ -n "$SAVED_CLEAN" ]; then
+  git -C "$GIT_WORKTREE_PATH" config filter.git-crypt.clean "$(normalize_git_crypt_filter "$SAVED_CLEAN")"
 fi
-if [ -n "$GIT_WT_SAVED_REQUIRED" ]; then
-  git -C "$GIT_WORKTREE_PATH" config filter.git-crypt.required "$GIT_WT_SAVED_REQUIRED"
+if [ -n "$SAVED_REQUIRED" ]; then
+  git -C "$GIT_WORKTREE_PATH" config filter.git-crypt.required "$SAVED_REQUIRED"
 fi
 
 # Final checkout to decrypt all files

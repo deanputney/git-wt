@@ -356,6 +356,48 @@ EOF
   [[ -d "feature" ]]
 }
 
+@test "git-crypt hooks restore and normalize main-repo filters after add" {
+  local script_dir=$(dirname "$GIT_WT_SCRIPT")
+
+  # Setup: Install git-crypt hooks
+  mkdir -p .git/hooks
+  cp "$script_dir/examples/hooks/git-crypt-pre-worktree-add" .git/hooks/pre-worktree-add
+  cp "$script_dir/examples/hooks/git-crypt-post-worktree-add" .git/hooks/post-worktree-add
+  chmod +x .git/hooks/pre-worktree-add .git/hooks/post-worktree-add
+
+  # Simulate a git-crypt repo that was unlocked on another machine, so the
+  # filter records an absolute binary path that does not exist here.
+  git config filter.git-crypt.smudge "/opt/homebrew/bin/git-crypt smudge"
+  git config filter.git-crypt.clean  "/opt/homebrew/bin/git-crypt clean"
+  git config filter.git-crypt.required true
+
+  # Run (git-crypt itself need not be installed: the post-hook's unlock step is
+  # non-fatal, but the main-repo filter restore runs before it regardless).
+  run bash "$GIT_WT_SCRIPT" add feature
+
+  # The pre-hook temporarily sets the filters to "cat"; the post-hook must
+  # restore them — and normalize the path so it resolves via PATH on this
+  # machine — rather than leaving them disabled or re-applying the absolute path.
+  assert_equal "$(git config filter.git-crypt.smudge)" "git-crypt smudge"
+  assert_equal "$(git config filter.git-crypt.clean)" "git-crypt clean"
+  assert_equal "$(git config filter.git-crypt.required)" "true"
+
+  # The pre/post handoff state file must be cleaned up.
+  [[ ! -f "$(git rev-parse --git-common-dir)/git-wt-git-crypt-state" ]]
+}
+
+@test "normalize_git_crypt_filter strips absolute path but keeps args" {
+  local post_hook="$(dirname "$GIT_WT_SCRIPT")/examples/hooks/git-crypt-post-worktree-add"
+
+  # Source just the helper function out of the example hook
+  eval "$(sed -n '/^normalize_git_crypt_filter ()/,/^}/p' "$post_hook")"
+
+  assert_equal "$(normalize_git_crypt_filter '/opt/homebrew/bin/git-crypt smudge')" "git-crypt smudge"
+  assert_equal "$(normalize_git_crypt_filter '"/opt/homebrew/bin/git-crypt" clean')" "git-crypt clean"
+  assert_equal "$(normalize_git_crypt_filter '/usr/bin/git-crypt smudge --key-name=foo')" "git-crypt smudge --key-name=foo"
+  assert_equal "$(normalize_git_crypt_filter 'git-crypt smudge')" "git-crypt smudge"
+}
+
 ################################################################################
 # G. install-hooks Command Tests
 ################################################################################

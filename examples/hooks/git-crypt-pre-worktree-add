@@ -16,10 +16,30 @@ if ! git config --get filter.git-crypt.smudge >/dev/null 2>&1; then
   exit 0
 fi
 
-# Save the current git-crypt filter settings to environment variables
-export GIT_WT_SAVED_SMUDGE=$(git config filter.git-crypt.smudge 2>/dev/null || echo "")
-export GIT_WT_SAVED_CLEAN=$(git config filter.git-crypt.clean 2>/dev/null || echo "")
-export GIT_WT_SAVED_REQUIRED=$(git config filter.git-crypt.required 2>/dev/null || echo "")
+# Save the current git-crypt filter settings so the post-hook can restore them.
+#
+# git-wt runs each hook as a separate subprocess and does not capture its
+# environment, so variables `export`ed here do NOT reach the post-hook. We
+# therefore persist the settings to a state file in the git common dir (shared
+# across worktrees); the post-hook reads it and removes it. The legacy
+# GIT_WT_SAVED_* env vars are still exported for backward compatibility.
+GIT_WT_GIT_CRYPT_STATE="$(git rev-parse --git-common-dir)/git-wt-git-crypt-state"
+SAVED_SMUDGE=$(git config filter.git-crypt.smudge 2>/dev/null || echo "")
+SAVED_CLEAN=$(git config filter.git-crypt.clean 2>/dev/null || echo "")
+SAVED_REQUIRED=$(git config filter.git-crypt.required 2>/dev/null || echo "")
+
+export GIT_WT_SAVED_SMUDGE="$SAVED_SMUDGE"
+export GIT_WT_SAVED_CLEAN="$SAVED_CLEAN"
+export GIT_WT_SAVED_REQUIRED="$SAVED_REQUIRED"
+
+# One KEY=value per line. Values may contain spaces and '=' (e.g.
+# `--key-name=foo`) but never newlines, so the post-hook strips only the known
+# key prefix when reading.
+{
+  printf 'SMUDGE=%s\n' "$SAVED_SMUDGE"
+  printf 'CLEAN=%s\n' "$SAVED_CLEAN"
+  printf 'REQUIRED=%s\n' "$SAVED_REQUIRED"
+} > "$GIT_WT_GIT_CRYPT_STATE"
 
 # Temporarily disable git-crypt by setting filters to cat
 # This prevents git-crypt errors during the initial checkout
